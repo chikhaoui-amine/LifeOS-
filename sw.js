@@ -3,7 +3,8 @@ const CACHE_NAME = 'lifeos-v1';
 const ASSETS = [
   '/',
   '/index.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/favicon.ico'
 ];
 
 self.addEventListener('install', (event) => {
@@ -17,7 +18,13 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
+      // Return cached asset or fetch from network
+      return response || fetch(event.request).catch(() => {
+        // Fallback to index.html if network fails (offline support for SPA)
+        if (event.request.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+      });
     })
   );
 });
