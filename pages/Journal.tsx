@@ -76,7 +76,7 @@ const Journal: React.FC = () => {
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 pb-24">
       
       {/* Header */}
-      <header className="relative p-6 sm:p-12 rounded-[2rem] sm:rounded-[3rem] bg-primary-600 text-white overflow-hidden shadow-2xl shadow-primary-900/20">
+      <header className="relative p-6 sm:p-12 rounded-[2rem] sm:rounded-[3rem] bg-primary text-white overflow-hidden shadow-2xl shadow-primary/20">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-3 sm:space-y-4">
@@ -89,7 +89,7 @@ const Journal: React.FC = () => {
 
           <button 
             onClick={() => { setSelectedEntry(null); setIsFormOpen(true); }}
-            className="shrink-0 bg-white hover:bg-gray-50 text-primary-600 px-6 py-4 sm:px-10 rounded-2xl sm:rounded-[2rem] flex items-center justify-center gap-3 font-black text-xs sm:text-base shadow-xl active:scale-95 transition-all"
+            className="shrink-0 bg-white hover:bg-gray-50 text-primary px-6 py-4 sm:px-10 rounded-2xl sm:rounded-[2rem] flex items-center justify-center gap-3 font-black text-xs sm:text-base shadow-xl active:scale-95 transition-all"
           >
             <Plus size={20} sm-size={24} strokeWidth={4} />
             <span className="uppercase tracking-widest">{t.journal.newEntry}</span>
@@ -99,7 +99,7 @@ const Journal: React.FC = () => {
 
       {/* Nav & Search */}
       <div className="sticky top-2 z-20 space-y-2">
-         <div className="bg-[#0f172a] p-1.5 rounded-2xl sm:rounded-[1.5rem] shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-2 border border-white/5">
+         <div className="bg-surface/80 backdrop-blur-md p-1.5 rounded-2xl sm:rounded-[1.5rem] shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-2 border border-foreground/5">
             <div className="flex items-center p-1 overflow-x-auto no-scrollbar gap-1">
                {[
                  { id: 'timeline', icon: List, label: t.journal.timeline },
@@ -109,7 +109,7 @@ const Journal: React.FC = () => {
                  <button 
                     key={m.id}
                     onClick={() => setViewMode(m.id as any)} 
-                    className={`px-4 py-2.5 sm:px-6 sm:py-3 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${viewMode === m.id ? 'bg-[#1e293b] text-primary-500 shadow-md ring-1 ring-white/5' : 'text-slate-400 hover:text-white'}`}
+                    className={`px-4 py-2.5 sm:px-6 sm:py-3 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${viewMode === m.id ? 'bg-primary text-white shadow-md' : 'text-foreground/40 hover:text-foreground'}`}
                  >
                     <m.icon size={16} strokeWidth={3} /> {m.label}
                  </button>
@@ -118,13 +118,13 @@ const Journal: React.FC = () => {
 
             {viewMode === 'timeline' && (
                <div className="relative flex-1 md:max-w-xs group px-2 pb-2 md:pb-0">
-                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={14} strokeWidth={3} />
+                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-muted" size={14} strokeWidth={3} />
                   <input 
                     type="text" 
                     placeholder={t.journal.search} 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#1e293b] border-none outline-none text-xs font-bold text-white placeholder:text-slate-600"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-foreground/5 border-none outline-none text-xs font-bold text-foreground placeholder:text-muted"
                   />
                </div>
             )}
