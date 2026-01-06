@@ -1,0 +1,16 @@
+
+{
+  "appId": "com.lifeos.app",
+  "appName": "LifeOS",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "backgroundColor": "#4f46e5"
+  }
+}
