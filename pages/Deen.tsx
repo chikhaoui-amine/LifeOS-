@@ -1,8 +1,9 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Moon, Star, BarChart3, Quote } from 'lucide-react';
+import { Moon, Star, Quote } from 'lucide-react';
 import { useIslamic } from '../context/IslamicContext';
 import { useSettings } from '../context/SettingsContext';
+import { useSystemDate } from '../context/SystemDateContext';
 import { getTranslation } from '../utils/translations';
 import { SalahTracker } from '../components/islamic/SalahTracker';
 import { SunnahTracker } from '../components/islamic/SunnahTracker';
@@ -10,6 +11,7 @@ import { AthkarTracker } from '../components/islamic/AthkarTracker';
 import { QuranTracker } from '../components/islamic/QuranTracker';
 import { IslamicStats } from '../components/islamic/IslamicStats';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { SystemDateStrip } from '../components/SystemDateStrip';
 import { getHijriDate, getHijriKey, getIslamicHoliday, getDaysUntilHijriEvent } from '../utils/islamicUtils';
 import { formatDateKey, isToday } from '../utils/dateUtils';
 import { LanguageCode } from '../types';
@@ -17,49 +19,12 @@ import { LanguageCode } from '../types';
 const Deen: React.FC = () => {
   const { loading, settings: islamicSettings } = useIslamic();
   const { settings } = useSettings();
+  const { selectedDate, selectedDateObject } = useSystemDate();
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
 
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const dateStrip = useMemo(() => {
-    const days = [];
-    const today = new Date();
-    for (let i = -14; i <= 14; i++) {
-        const d = new Date();
-        d.setDate(today.getDate() + i);
-        days.push(d);
-    }
-    return days;
-  }, []);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-        const index = dateStrip.findIndex(d => formatDateKey(d) === formatDateKey(selectedDate));
-        if (index !== -1) {
-            const el = scrollRef.current.children[index] as HTMLElement;
-            if (el) {
-                const scrollLeft = el.offsetLeft - (scrollRef.current.clientWidth / 2) + (el.clientWidth / 2);
-                scrollRef.current.scrollTo({ left: scrollLeft, behavior: 'smooth' });
-            }
-        }
-    }
-  }, [selectedDate, dateStrip]);
-  
-  const selectedHijri = useMemo(() => getHijriDate(selectedDate, islamicSettings.hijriAdjustment), [selectedDate, islamicSettings.hijriAdjustment]);
-  const selectedDateKey = useMemo(() => getHijriKey(selectedDate, islamicSettings.hijriAdjustment), [selectedDate, islamicSettings.hijriAdjustment]);
+  const selectedHijri = useMemo(() => getHijriDate(selectedDateObject, islamicSettings.hijriAdjustment), [selectedDateObject, islamicSettings.hijriAdjustment]);
+  const selectedHijriKey = useMemo(() => getHijriKey(selectedDateObject, islamicSettings.hijriAdjustment), [selectedDateObject, islamicSettings.hijriAdjustment]);
   const selectedHoliday = useMemo(() => getIslamicHoliday(selectedHijri.day, selectedHijri.month), [selectedHijri]);
-
-  const upcomingEvents = useMemo(() => {
-    const today = new Date();
-    const todayHijri = getHijriDate(today, islamicSettings.hijriAdjustment);
-    
-    return [
-      { name: 'Ramadan', days: getDaysUntilHijriEvent(9, 1, todayHijri, islamicSettings.hijriAdjustment), color: 'bg-emerald-500' },
-      { name: 'Eid al-Fitr', days: getDaysUntilHijriEvent(10, 1, todayHijri, islamicSettings.hijriAdjustment), color: 'bg-amber-500' },
-      { name: 'Eid al-Adha', days: getDaysUntilHijriEvent(12, 10, todayHijri, islamicSettings.hijriAdjustment), color: 'bg-blue-500' },
-    ].sort((a, b) => a.days - b.days);
-  }, [islamicSettings.hijriAdjustment]);
 
   if (loading) return <LoadingSkeleton count={3} />;
 
@@ -91,35 +56,16 @@ const Deen: React.FC = () => {
                   )}
                </div>
             </div>
-
-            {/* Scrollable Date Strip */}
-            <div className="w-full bg-white/5 backdrop-blur-md border border-white/5 rounded-3xl p-2 sm:p-3 overflow-hidden">
-               <div ref={scrollRef} className="flex gap-2 overflow-x-auto no-scrollbar pb-1 snap-x">
-                  {dateStrip.map((date, i) => {
-                     const isSelected = formatDateKey(date) === formatDateKey(selectedDate);
-                     const isDateToday = isToday(date);
-                     return (
-                        <button
-                           key={i}
-                           onClick={() => setSelectedDate(date)}
-                           className={`flex flex-col items-center justify-center min-w-[50px] sm:min-w-[56px] h-14 sm:h-16 rounded-2xl transition-all shrink-0 snap-center ${isSelected ? 'bg-white text-emerald-900 shadow-xl scale-105 z-10' : 'text-emerald-100/60 hover:bg-white/10 hover:text-white'}`}
-                        >
-                           <span className="text-[8px] font-bold uppercase tracking-wider mb-0.5">{date.toLocaleDateString('en-US', { weekday: 'short' }).slice(0,3)}</span>
-                           <span className={`text-lg sm:text-xl font-black ${isDateToday && !isSelected ? 'text-amber-400' : ''}`}>{date.getDate()}</span>
-                           {isDateToday && <div className={`w-1 h-1 rounded-full mt-1 ${isSelected ? 'bg-emerald-900' : 'bg-amber-400'}`} />}
-                        </button>
-                     )
-                  })}
-               </div>
-            </div>
          </div>
       </div>
+
+      <SystemDateStrip />
 
       {/* 2. Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
          <div className="lg:col-span-3 space-y-6">
-            <SalahTracker dateKey={selectedDateKey} gregorianDate={selectedDate} />
-            <SunnahTracker dateKey={selectedDateKey} />
+            <SalahTracker dateKey={selectedHijriKey} gregorianDate={selectedDateObject} />
+            <SunnahTracker dateKey={selectedHijriKey} />
          </div>
 
          <div className="lg:col-span-6 space-y-6">
@@ -128,7 +74,7 @@ const Deen: React.FC = () => {
          </div>
 
          <div className="lg:col-span-3 space-y-6">
-            <AthkarTracker dateKey={selectedDateKey} />
+            <AthkarTracker dateKey={selectedHijriKey} />
             <div className="bg-surface rounded-[2rem] p-6 border border-foreground/5 shadow-sm">
                 <div className="flex items-center gap-3 mb-4 text-primary-600 dark:text-primary-400">
                     <Quote size={20} className="fill-current opacity-20" />

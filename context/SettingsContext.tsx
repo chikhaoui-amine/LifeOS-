@@ -1,8 +1,7 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AppSettings, LanguageCode } from '../types';
 import { storage } from '../utils/storage';
-import { BackupService } from '../services/BackupService';
+import { BackupService, STORAGE_KEYS } from '../services/BackupService';
 import { isRTL } from '../utils/translations';
 
 interface SettingsContextType {
@@ -15,7 +14,6 @@ interface SettingsContextType {
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
-const SETTINGS_KEY = 'lifeos_settings_v1';
 const GOOGLE_CONNECTED_KEY = 'lifeos_google_linked';
 const LAST_BACKUP_KEY = 'lifeos_last_auto_backup';
 
@@ -33,9 +31,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     startOfWeek: 'sunday',
     dateFormat: 'MM/DD/YYYY',
     timeFormat: '12h',
-    autoBackup: false,
+    autoBackup: true,
     enableIslamicFeatures: true,
-    // Fix: Added missing reportDay property (0 for Sunday)
     reportDay: 0,
   },
   disabledModules: [],
@@ -47,8 +44,8 @@ const DEFAULT_SETTINGS: AppSettings = {
 export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [isGoogleConnected, setGoogleConnectedState] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Helper for deep merging to ensure nested defaults are preserved
   const mergeDeep = (target: any, source: any) => {
     if (!source) return target;
     const result = { ...target, ...source };
@@ -58,119 +55,85 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     if (target.preferences && source.preferences) {
       result.preferences = { ...target.preferences, ...source.preferences };
     }
-    if (target.meals && source.meals) {
-      result.meals = { ...target.meals, ...source.meals };
-    }
-    // Explicitly handle arrays like disabledModules
-    if (source.disabledModules) {
-      result.disabledModules = source.disabledModules;
-    }
     return result;
   };
 
-  // Load Settings
   useEffect(() => {
     const loadSettings = async () => {
-      const data = await storage.load<any>(SETTINGS_KEY);
-      if (data) {
-        setSettings(prev => mergeDeep(prev, data));
-      }
-      
+      const data = await storage.load<any>(STORAGE_KEYS.SETTINGS);
+      if (data) setSettings(prev => mergeDeep(prev, data));
       const googleLinked = await storage.load<boolean>(GOOGLE_CONNECTED_KEY);
       setGoogleConnectedState(!!googleLinked);
+      setLoading(false);
     };
     loadSettings();
   }, []);
 
-  // Update HTML Direction and Language defensively
   useEffect(() => {
     const lang = settings?.preferences?.language || 'en';
     document.documentElement.dir = isRTL(lang as LanguageCode) ? 'rtl' : 'ltr';
     document.documentElement.lang = lang;
   }, [settings?.preferences?.language]);
 
-  // Check Auto Backup Logic - Updated to capture ALL data
+  // Periodic Local Auto-Backup (Safety Snapshots)
   useEffect(() => {
-    const checkAutoBackup = async () => {
-      if (!settings?.preferences?.autoBackup) return;
+    if (loading || !settings?.preferences?.autoBackup) return;
 
+    const runSafetySnapshot = async () => {
       const lastBackupStr = await storage.load<string>(LAST_BACKUP_KEY);
       const now = new Date();
       const lastBackup = lastBackupStr ? new Date(lastBackupStr) : new Date(0);
       
-      const oneDay = 24 * 60 * 60 * 1000;
-      if (now.getTime() - lastBackup.getTime() > oneDay) {
-        console.log("Running comprehensive auto-backup...");
+      const eightHours = 8 * 60 * 60 * 1000;
+      if (now.getTime() - lastBackup.getTime() > eightHours) {
+        console.log("LifeOS: Creating safety snapshot...");
         
-        // 1. Core
-        const habits = await storage.load<any>('lifeos_habits_v2') || [];
-        const habitCategories = await storage.load<any>('lifeos_habit_categories_v1');
-        const tasks = await storage.load<any>('lifeos_tasks_v2') || [];
+        // Compiling everything from Storage
+        const snapshot: any = BackupService.createBackupData([], [], settings);
         
-        // 2. Extended
-        const goals = await storage.load<any>('lifeos_goals_v1');
-        const journal = await storage.load<any>('lifeos_journal_v1');
-        const timeBlocks = await storage.load<any>('lifeos_time_blocks_v1');
-        
-        // 3. Finance
-        const accounts = await storage.load<any>('lifeos_finance_accounts_v1') || [];
-        const transactions = await storage.load<any>('lifeos_finance_transactions_v1') || [];
-        const budgets = await storage.load<any>('lifeos_finance_budgets_v1') || [];
-        const savingsGoals = await storage.load<any>('lifeos_finance_goals_v1') || [];
-        const currency = await storage.load<any>('lifeos_finance_currency_v1');
-        
-        // 4. Meals
-        const recipes = await storage.load<any>('lifeos_recipes_v1') || [];
-        const foods = await storage.load<any>('lifeos_foods_v1') || [];
-        const mealPlans = await storage.load<any>('lifeos_meal_plans_v1') || [];
-        const shoppingList = await storage.load<any>('lifeos_shopping_list_v1') || [];
-        
-        // 5. Sleep & Wellness
-        const sleepLogs = await storage.load<any>('lifeos_sleep_logs_v1');
-        const sleepSettings = await storage.load<any>('lifeos_sleep_settings_v1');
-        
-        // 6. Islamic
-        const prayers = await storage.load<any>('lifeos_islamic_data_v2');
-        const quran = await storage.load<any>('lifeos_quran_v2');
-        const adhkar = await storage.load<any>('lifeos_adhkar_v1');
-        const islamicSettings = await storage.load<any>('lifeos_islamic_settings_v1');
-        
-        // 7. Themes
-        const customThemes = await storage.load<any>('lifeos_custom_themes');
-
-        // Create Full Snapshot
-        const snapshot = BackupService.createBackupData(habits, tasks, settings);
-        
-        // Attach everything
-        snapshot.habitCategories = habitCategories;
-        snapshot.goals = goals;
-        snapshot.journal = journal;
-        snapshot.timeBlocks = timeBlocks;
-        snapshot.finance = { accounts, transactions, budgets, savingsGoals, currency };
-        snapshot.meals = { recipes, foods, mealPlans, shoppingList };
-        snapshot.sleepLogs = sleepLogs;
-        snapshot.sleepSettings = sleepSettings;
-        snapshot.prayers = prayers;
-        snapshot.quran = quran;
-        snapshot.adhkar = adhkar;
-        snapshot.islamicSettings = islamicSettings;
-        snapshot.customThemes = customThemes;
+        // Grab all core module data from storage
+        snapshot.habits = await storage.load(STORAGE_KEYS.HABITS) || [];
+        snapshot.habitCategories = await storage.load(STORAGE_KEYS.HABIT_CATEGORIES);
+        snapshot.tasks = await storage.load(STORAGE_KEYS.TASKS) || [];
+        snapshot.journal = await storage.load(STORAGE_KEYS.JOURNAL);
+        snapshot.goals = await storage.load(STORAGE_KEYS.GOALS);
+        snapshot.visionBoard = await storage.load(STORAGE_KEYS.VISION_BOARD);
+        snapshot.reports = await storage.load(STORAGE_KEYS.REPORTS);
+        snapshot.timeBlocks = await storage.load(STORAGE_KEYS.TIME_BLOCKS);
+        snapshot.finance = {
+          accounts: await storage.load(STORAGE_KEYS.FINANCE_ACCOUNTS) || [],
+          transactions: await storage.load(STORAGE_KEYS.FINANCE_TXS) || [],
+          budgets: await storage.load(STORAGE_KEYS.FINANCE_BUDGETS) || [],
+          savingsGoals: await storage.load(STORAGE_KEYS.FINANCE_GOALS) || [],
+          currency: await storage.load(STORAGE_KEYS.FINANCE_CURRENCY)
+        };
+        snapshot.meals = {
+          recipes: await storage.load(STORAGE_KEYS.MEAL_RECIPES) || [],
+          foods: await storage.load(STORAGE_KEYS.MEAL_FOODS) || [],
+          mealPlans: await storage.load(STORAGE_KEYS.MEAL_PLANS) || [],
+          shoppingList: await storage.load(STORAGE_KEYS.MEAL_SHOPPING) || []
+        };
+        snapshot.sleepLogs = await storage.load(STORAGE_KEYS.SLEEP_LOGS);
+        snapshot.sleepSettings = await storage.load(STORAGE_KEYS.SLEEP_SETTINGS);
+        snapshot.prayers = await storage.load(STORAGE_KEYS.DEEN_PRAYERS);
+        snapshot.quran = await storage.load(STORAGE_KEYS.DEEN_QURAN);
+        snapshot.adhkar = await storage.load(STORAGE_KEYS.DEEN_ADHKAR);
+        snapshot.islamicSettings = await storage.load(STORAGE_KEYS.DEEN_SETTINGS);
+        snapshot.customThemes = await storage.load(STORAGE_KEYS.CUSTOM_THEMES);
 
         await BackupService.saveAutoSnapshot(snapshot);
         await storage.save(LAST_BACKUP_KEY, now.toISOString());
       }
     };
 
-    const timer = setTimeout(checkAutoBackup, 5000); // Wait 5s after load
+    const timer = setTimeout(runSafetySnapshot, 5000);
     return () => clearTimeout(timer);
-  }, [settings?.preferences?.autoBackup]);
+  }, [loading, settings]);
 
   const updateSettings = (updates: any) => {
     setSettings(prev => {
       const newSettings = mergeDeep(prev, updates);
-      if (updates.morningTime) newSettings.notifications.morningTime = updates.morningTime;
-      
-      storage.save(SETTINGS_KEY, newSettings);
+      storage.save(STORAGE_KEYS.SETTINGS, newSettings);
       return newSettings;
     });
   };
@@ -182,7 +145,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const resetSettings = () => {
     setSettings(DEFAULT_SETTINGS);
-    storage.save(SETTINGS_KEY, DEFAULT_SETTINGS);
+    storage.save(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
   };
 
   return (

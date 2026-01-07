@@ -17,6 +17,7 @@ import { TimeBlockProvider } from './context/TimeBlockContext';
 import { VisionBoardProvider } from './context/VisionBoardContext';
 import { ReportProvider } from './context/ReportContext';
 import { SyncProvider } from './context/SyncContext';
+import { SystemDateProvider } from './context/SystemDateContext';
 import { DigitalWellnessProvider } from './context/DigitalWellnessContext';
 import { NotificationScheduler } from './components/NotificationScheduler';
 import { ReportScheduler } from './components/ReportScheduler';
@@ -44,58 +45,60 @@ function App() {
       <ThemeProvider>
         <ToastProvider>
           <SettingsProvider>
-            <HabitProvider>
-              <TaskProvider>
-                <GoalProvider>
-                  <JournalProvider>
-                    <FinanceProvider>
-                      <IslamicProvider>
-                        <MealProvider>
-                          <SleepProvider>
-                            <TimeBlockProvider>
-                              <VisionBoardProvider>
-                                <DigitalWellnessProvider>
-                                  <ReportProvider>
-                                    <SyncProvider>
-                                      <NotificationScheduler />
-                                      <ReportScheduler />
-                                      
-                                      <HashRouter>
-                                        <Routes>
-                                          <Route path="/" element={<Layout />}>
-                                            <Route index element={<Today />} />
-                                            <Route path="vision" element={<VisionBoard />} />
-                                            <Route path="habits" element={<Habits />} />
-                                            <Route path="tasks" element={<Tasks />} />
-                                            <Route path="goals" element={<Goals />} />
-                                            <Route path="journal" element={<Journal />} />
-                                            <Route path="finance" element={<Finance />} />
-                                            <Route path="deen" element={<Islamic />} />
-                                            <Route path="meals" element={<Meals />} />
-                                            <Route path="sleep" element={<Sleep />} />
-                                            <Route path="wellness" element={<DigitalWellness />} />
-                                            <Route path="calendar" element={<Calendar />} />
-                                            <Route path="statistics" element={<Statistics />} />
-                                            <Route path="reports" element={<Reports />} />
-                                            <Route path="settings" element={<Settings />} />
-                                            <Route path="settings/theme-creator" element={<ThemeCustomizer />} />
-                                            <Route path="*" element={<Navigate to="/" replace />} />
-                                          </Route>
-                                        </Routes>
-                                      </HashRouter>
-                                    </SyncProvider>
-                                  </ReportProvider>
-                                </DigitalWellnessProvider>
-                              </VisionBoardProvider>
-                            </TimeBlockProvider>
-                          </SleepProvider>
-                        </MealProvider>
-                      </IslamicProvider>
-                    </FinanceProvider>
-                  </JournalProvider>
-                </GoalProvider>
-              </TaskProvider>
-            </HabitProvider>
+            <SystemDateProvider>
+              <HabitProvider>
+                <TaskProvider>
+                  <GoalProvider>
+                    <JournalProvider>
+                      <FinanceProvider>
+                        <IslamicProvider>
+                          <MealProvider>
+                            <SleepProvider>
+                              <TimeBlockProvider>
+                                <VisionBoardProvider>
+                                  <DigitalWellnessProvider>
+                                    <ReportProvider>
+                                      <SyncProvider>
+                                        <NotificationScheduler />
+                                        <ReportScheduler />
+                                        
+                                        <HashRouter>
+                                          <Routes>
+                                            <Route path="/" element={<Layout />}>
+                                              <Route index element={<Today />} />
+                                              <Route path="vision" element={<VisionBoard />} />
+                                              <Route path="habits" element={<Habits />} />
+                                              <Route path="tasks" element={<Tasks />} />
+                                              <Route path="goals" element={<Goals />} />
+                                              <Route path="journal" element={<Journal />} />
+                                              <Route path="finance" element={<Finance />} />
+                                              <Route path="deen" element={<Islamic />} />
+                                              <Route path="meals" element={<Meals />} />
+                                              <Route path="sleep" element={<Sleep />} />
+                                              <Route path="wellness" element={<DigitalWellness />} />
+                                              <Route path="calendar" element={<Calendar />} />
+                                              <Route path="statistics" element={<Statistics />} />
+                                              <Route path="reports" element={<Reports />} />
+                                              <Route path="settings" element={<Settings />} />
+                                              <Route path="settings/theme-creator" element={<ThemeCustomizer />} />
+                                              <Route path="*" element={<Navigate to="/" replace />} />
+                                            </Route>
+                                          </Routes>
+                                        </HashRouter>
+                                      </SyncProvider>
+                                    </ReportProvider>
+                                  </DigitalWellnessProvider>
+                                </VisionBoardProvider>
+                              </TimeBlockProvider>
+                            </SleepProvider>
+                          </MealProvider>
+                        </IslamicProvider>
+                      </FinanceProvider>
+                    </JournalProvider>
+                  </GoalProvider>
+                </TaskProvider>
+              </HabitProvider>
+            </SystemDateProvider>
           </SettingsProvider>
         </ToastProvider>
       </ThemeProvider>

@@ -2,10 +2,11 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Plus, Search, CheckCircle2, Sunrise, Sun, Moon, Clock,
-  Sparkles, Zap, Flame
+  Sparkles, Zap
 } from 'lucide-react';
 import { useHabits } from '../context/HabitContext';
 import { useSettings } from '../context/SettingsContext';
+import { useSystemDate } from '../context/SystemDateContext';
 import { getTranslation } from '../utils/translations';
 import { HabitForm } from '../components/HabitForm';
 import { HabitCard } from '../components/HabitCard';
@@ -14,12 +15,12 @@ import { HabitStatsDetail } from '../components/HabitStatsDetail';
 import { EmptyState } from '../components/EmptyState';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { ConfirmationModal } from '../components/ConfirmationModal';
-import { getTodayKey } from '../utils/dateUtils';
 import { Habit, LanguageCode } from '../types';
 
 const Habits: React.FC = () => {
   const { habits, loading, addHabit, updateHabit, deleteHabit, toggleHabit, archiveHabit } = useHabits();
   const { settings } = useSettings();
+  const { selectedDate, selectedDateObject } = useSystemDate();
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,17 +36,15 @@ const Habits: React.FC = () => {
     onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
-  const todayKey = getTodayKey();
-
   // --- Data Calculations ---
   const stats = useMemo(() => {
     const active = habits.filter(h => !h.archived);
-    const dayIndex = new Date().getDay();
-    const scheduledToday = active.filter(h => h.frequency.days.includes(dayIndex));
-    const completedToday = scheduledToday.filter(h => h.completedDates.includes(todayKey)).length;
-    const progress = scheduledToday.length === 0 ? 0 : Math.round((completedToday / scheduledToday.length) * 100);
-    return { total: active.length, scheduled: scheduledToday.length, completed: completedToday, progress };
-  }, [habits, todayKey]);
+    const dayIndex = selectedDateObject.getDay();
+    const scheduledOnDate = active.filter(h => h.frequency.days.includes(dayIndex));
+    const completedOnDate = scheduledOnDate.filter(h => h.completedDates.includes(selectedDate)).length;
+    const progress = scheduledOnDate.length === 0 ? 0 : Math.round((completedOnDate / scheduledOnDate.length) * 100);
+    return { total: active.length, scheduled: scheduledOnDate.length, completed: completedOnDate, progress };
+  }, [habits, selectedDate, selectedDateObject]);
 
   const filteredHabits = useMemo(() => {
     return habits.filter(h => {
@@ -97,22 +96,22 @@ const Habits: React.FC = () => {
   ];
 
   return (
-    <div className="h-[calc(100vh-100px)] flex flex-col animate-in fade-in duration-500 pb-2 md:pb-0 gap-4 sm:gap-6 overflow-hidden">
+    <div className="h-full flex flex-col animate-in fade-in duration-500 pb-32 gap-2 sm:gap-4">
       
       {/* Header - Optimized for Mobile */}
-      <header className="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 mb-4">
+      <header className="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-2 py-1 mb-2">
         <div className="flex items-center gap-3 sm:gap-4">
            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary-600 rounded-xl flex items-center justify-center text-white shadow-xl shadow-primary-600/20 rotate-3">
-              <CheckCircle2 size={20} sm-size={24} strokeWidth={2.5} />
+              <CheckCircle2 size={20} strokeWidth={2.5} />
            </div>
            <div>
               <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tighter uppercase">{t.habits.title}</h1>
               <div className="flex items-center gap-3 mt-0.5">
                  <div className="flex items-center gap-1.5 bg-primary-50 dark:bg-primary-900/20 px-2 py-0.5 rounded-lg">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse" />
-                    <span className="text-[9px] sm:text-[10px] font-black text-primary-600 uppercase tracking-widest">{stats.completed}/{stats.scheduled} Today</span>
+                    <span className="text-[9px] sm:text-[10px] font-black text-primary-600 uppercase tracking-widest">{stats.completed}/{stats.scheduled} Done</span>
                  </div>
-                 <span className="text-[9px] sm:text-[10px] font-bold text-muted uppercase tracking-widest">{stats.progress}% Consistency</span>
+                 <span className="text-[9px] sm:text-[10px] font-bold text-muted uppercase tracking-widest">{stats.progress}% Flow</span>
               </div>
            </div>
         </div>
@@ -147,8 +146,8 @@ const Habits: React.FC = () => {
         </div>
       </header>
 
-      {/* Daily Main Content Scrollable Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-1 pb-10">
+      {/* Main Content Area */}
+      <div className="flex-1 px-1">
         {loading ? (
            <div className="space-y-4">
               <LoadingSkeleton count={3} type="card" />
@@ -177,8 +176,8 @@ const Habits: React.FC = () => {
                          <HabitCard 
                            key={habit.id} 
                            habit={habit} 
-                           isCompleted={habit.completedDates.includes(todayKey)} 
-                           onToggle={() => toggleHabit(habit.id)} 
+                           isCompleted={habit.completedDates.includes(selectedDate)} 
+                           onToggle={() => toggleHabit(habit.id, selectedDate)} 
                            onEdit={() => handleEdit(habit)} 
                            onDelete={() => requestDeleteHabit(habit.id)} 
                            onArchive={() => archiveHabit(habit.id)} 

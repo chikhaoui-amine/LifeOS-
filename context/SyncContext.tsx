@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useSettings } from './SettingsContext';
 import { useHabits } from './HabitContext';
@@ -29,8 +28,6 @@ const SyncContext = createContext<SyncContextType | undefined>(undefined);
 
 export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { settings, setGoogleConnected } = useSettings();
-  
-  // Data Contexts - Gather EVERYTHING from EVERY module
   const { habits, categories: habitCategories } = useHabits();
   const { tasks } = useTasks();
   const { entries: journal } = useJournal();
@@ -50,8 +47,8 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [user, setUser] = useState<User | null>(null);
   
-  // Guard to prevent infinite loop: Remote Update -> Local Storage -> Sync Context -> Remote Update
-  const isRestoringRef = useRef(false);
+  // Guard against loops: If we just applied cloud data, don't immediately push it back up
+  const lastCloudUpdateRef = useRef<number>(0);
   const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -62,41 +59,13 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => unsubscribe();
   }, [setGoogleConnected]);
 
-  // Handle Cloud Subscription
-  useEffect(() => {
-    if (!user) return;
-
-    const unsubscribe = FirebaseService.subscribeToUserData(async (cloudData) => {
-      // If we are currently uploading, don't immediately overwrite local changes
-      if (isSyncing) return;
-
-      isRestoringRef.current = true;
-      setIsSyncing(true);
-
-      try {
-        await BackupService.performReplace(cloudData);
-        setLastSyncedAt(new Date());
-        // Note: The UI might need to reload or contexts might need re-loading if they don't watch storage
-        showToast('System synced with Cloud', 'info');
-      } catch (e) {
-        console.error("Sync Overwrite Error:", e);
-      } finally {
-        setIsSyncing(false);
-        // Delay resetting ref to avoid catching the immediate local write events
-        setTimeout(() => { isRestoringRef.current = false; }, 5000);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [user, showToast, isSyncing]);
-
   /**
-   * The Master Function: Compiles the entire app state into one object.
+   * Compiles the absolute current state of the entire application
    */
   const getCurrentState = useCallback((): BackupData => {
     const state = BackupService.createBackupData(habits, tasks, settings);
     
-    // Core Extended
+    // Core Modules
     state.habitCategories = habitCategories;
     state.journal = journal;
     state.goals = goals;
@@ -104,23 +73,23 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     state.reports = reports;
     state.timeBlocks = timeBlocks;
 
-    // Finance Module
+    // Finance
     state.finance = { accounts, transactions, budgets, savingsGoals, currency };
 
-    // Meals Module
+    // Meals
     state.meals = { recipes, foods, mealPlans, shoppingList };
 
-    // Recovery Module
+    // Wellness
     state.sleepLogs = sleepLogs;
     state.sleepSettings = sleepSettings;
 
-    // Islamic Module
+    // Spiritual
     state.prayers = prayers;
     state.quran = quran;
     state.adhkar = adhkar;
     state.islamicSettings = islamicSettings;
 
-    // Themes
+    // Customs
     state.customThemes = savedThemes;
 
     return state;
@@ -135,48 +104,84 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     savedThemes
   ]);
 
-  // Auto-Save Trigger
+  // Handle Incoming Cloud Snapshots
   useEffect(() => {
     if (!user) return;
-    if (isRestoringRef.current) return; 
 
-    if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
-
-    syncDebounceRef.current = setTimeout(async () => {
-      // Re-check guard inside timeout
-      if (isRestoringRef.current) return;
+    const unsubscribe = FirebaseService.subscribeToUserData(async (cloudData) => {
+      // If the incoming data is exactly what we just uploaded, ignore it
+      if (cloudData.exportDate && new Date(cloudData.exportDate).getTime() <= lastCloudUpdateRef.current) {
+        return;
+      }
 
       setIsSyncing(true);
       try {
-        const data = getCurrentState();
-        await FirebaseService.saveUserData(data);
+        console.log("LifeOS: Applying Remote Sync...");
+        await BackupService.performReplace(cloudData);
+        lastCloudUpdateRef.current = new Date(cloudData.exportDate).getTime();
         setLastSyncedAt(new Date());
-        console.log("LifeOS: Cloud auto-sync success.");
+        
+        // Silent reload of local UI state is tricky, so we notify user or can force reload
+        showToast('Cloud Data Synchronized', 'info');
       } catch (e) {
-        console.error("LifeOS: Auto-sync failed.", e);
+        console.error("Cloud Apply Error:", e);
       } finally {
         setIsSyncing(false);
       }
-    }, 10000); // 10s debounce for heavy data
+    });
+
+    return () => unsubscribe();
+  }, [user, showToast]);
+
+  // Handle Automatic Cloud Uploads
+  useEffect(() => {
+    if (!user) return;
+    
+    // Clear existing debounce
+    if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
+
+    syncDebounceRef.current = setTimeout(async () => {
+      // If we are currently processing a download, skip upload
+      if (isSyncing) return;
+
+      const data = getCurrentState();
+      const currentTs = new Date(data.exportDate).getTime();
+      
+      // If this data matches exactly what we just got from cloud, don't send it back
+      if (currentTs <= lastCloudUpdateRef.current) return;
+
+      setIsSyncing(true);
+      try {
+        await FirebaseService.saveUserData(data);
+        lastCloudUpdateRef.current = currentTs;
+        setLastSyncedAt(new Date());
+        console.log("LifeOS: Cloud auto-sync update sent.");
+      } catch (e) {
+        console.error("Auto-Sync Upload Failed:", e);
+      } finally {
+        setIsSyncing(false);
+      }
+    }, 15000); // 15 second debounce to batch high-frequency changes
 
     return () => {
       if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
     };
-  }, [user, getCurrentState]);
+  }, [user, getCurrentState, isSyncing]);
 
   const syncNow = async () => {
     if (!user) {
-        showToast("Please connect to Google first", "error");
+        showToast("Please connect to Google Account", "error");
         return;
     }
     setIsSyncing(true);
     try {
         const data = getCurrentState();
         await FirebaseService.saveUserData(data);
+        lastCloudUpdateRef.current = new Date(data.exportDate).getTime();
         setLastSyncedAt(new Date());
-        showToast('Manual Sync Successful', 'success');
+        showToast('Cloud Synchronization Complete', 'success');
     } catch(e) {
-        showToast('Manual Sync Failed', 'error');
+        showToast('Sync Failed. Check Connection.', 'error');
     } finally {
         setIsSyncing(false);
     }

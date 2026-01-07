@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Plus, CheckCircle2, ListTodo, Sun, Moon, Sunrise, 
+  CheckCircle2, ListTodo, Sun, Moon, Sunrise, 
   Calendar as CalendarIcon, 
   Target, Flame, Check
 } from 'lucide-react';
@@ -11,7 +11,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useFinance } from '../context/FinanceContext';
 import { useIslamic } from '../context/IslamicContext';
 import { useGoals } from '../context/GoalContext';
-import { getFormattedDate, getTodayKey } from '../utils/dateUtils';
+import { useSystemDate } from '../context/SystemDateContext';
 import { HabitCard } from '../components/HabitCard';
 import { TaskCard } from '../components/TaskCard';
 import { TaskForm } from '../components/TaskForm';
@@ -20,23 +20,19 @@ import { Task, LanguageCode } from '../types';
 import { getTranslation } from '../utils/translations';
 
 const Today: React.FC = () => {
-  const { habits, toggleHabit, getHabitStats } = useHabits();
-  const { tasks, toggleTask, deleteTask, addTask, toggleSubtask, updateTask, getTaskStats } = useTasks();
+  const { habits, toggleHabit } = useHabits();
+  const { tasks, toggleTask, deleteTask, addTask, toggleSubtask, updateTask } = useTasks();
   const { settings } = useSettings();
   const { transactions, getFormattedCurrency } = useFinance();
   const { hijriDate } = useIslamic();
   const { goals } = useGoals();
+  const { selectedDate, isToday, selectedDateObject } = useSystemDate();
   
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   
-  const [activeModal, setActiveModal] = useState<'habit' | 'task' | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-
-  const todayKey = getTodayKey();
-  const dateStr = getFormattedDate();
-  const currentHour = new Date().getHours();
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -44,6 +40,7 @@ const Today: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const currentHour = new Date().getHours();
   const timeContext = useMemo(() => {
     if (currentHour < 12) return { greeting: t.today.morning, icon: Sunrise, sub: 'The world is quiet. Build your momentum.' };
     if (currentHour < 17) return { greeting: t.today.afternoon, icon: Sun, sub: 'The sun is high. Stay sharp and focused.' };
@@ -51,47 +48,53 @@ const Today: React.FC = () => {
   }, [currentHour, t]);
 
   const todaysHabits = useMemo(() => {
-    const dayIndex = new Date().getDay();
+    const dayIndex = selectedDateObject.getDay();
     return habits.filter(h => !h.archived && h.frequency.days.includes(dayIndex));
-  }, [habits]);
+  }, [habits, selectedDateObject]);
 
   const { urgentTasks, routineTasks } = useMemo(() => {
-    const active = tasks.filter(t => t.dueDate === todayKey && !t.completed);
+    const active = tasks.filter(t => t.dueDate === selectedDate && !t.completed);
     return {
       urgentTasks: active.filter(t => t.priority === 'high'),
       routineTasks: active.filter(t => t.priority !== 'high')
     };
-  }, [tasks, todayKey]);
+  }, [tasks, selectedDate]);
 
   const activeGoal = useMemo(() => {
     return goals.find(g => g.status === 'in-progress' && g.priority === 'high') || goals[0];
   }, [goals]);
 
   const dailySpend = useMemo(() => {
-    return transactions.filter(tx => tx.date === todayKey && tx.type === 'expense').reduce((acc, tx) => acc + tx.amount, 0);
-  }, [transactions, todayKey]);
+    return transactions.filter(tx => tx.date === selectedDate && tx.type === 'expense').reduce((acc, tx) => acc + tx.amount, 0);
+  }, [transactions, selectedDate]);
 
-  const taskStats = getTaskStats();
-  const habitStats = getHabitStats();
+  const taskStats = useMemo(() => {
+     const dateTasks = tasks.filter(t => t.dueDate === selectedDate);
+     const completed = dateTasks.filter(t => t.completed).length;
+     return { total: dateTasks.length, completedToday: completed };
+  }, [tasks, selectedDate]);
+
+  const habitStats = useMemo(() => {
+     const dayIndex = selectedDateObject.getDay();
+     const active = habits.filter(h => !h.archived && h.frequency.days.includes(dayIndex));
+     const completed = active.filter(h => h.completedDates.includes(selectedDate)).length;
+     return { completionRate: active.length > 0 ? Math.round((completed / active.length) * 100) : 0, completedToday: completed };
+  }, [habits, selectedDate, selectedDateObject]);
   
-  const totalTasksToday = useMemo(() => {
-     return tasks.filter(t => t.dueDate === todayKey).length;
-  }, [tasks, todayKey]);
-  
-  const taskProgress = totalTasksToday > 0 ? (taskStats.completedToday / totalTasksToday) * 100 : 0;
+  const taskProgress = taskStats.total > 0 ? (taskStats.completedToday / taskStats.total) * 100 : 0;
 
   return (
-    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-1000 pb-32">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-1000 pb-32">
       
       {/* 1. Hero Command Center */}
-      <div className="relative overflow-hidden p-6 sm:p-12 rounded-[2rem] sm:rounded-[3rem] text-white bg-primary shadow-xl transition-all duration-1000">
+      <div className="relative overflow-hidden p-4 sm:p-8 rounded-[2rem] sm:rounded-[3rem] text-white bg-primary shadow-xl transition-all duration-1000">
          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none" />
          
-         <div className="relative z-10 flex flex-col justify-between gap-6 sm:gap-8">
-            <div className="space-y-4 sm:space-y-8">
+         <div className="relative z-10 flex flex-col justify-between gap-4 sm:gap-6">
+            <div className="space-y-3 sm:space-y-6">
                <div className="flex flex-wrap gap-2 sm:gap-3">
                   <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-white/15 backdrop-blur-md rounded-full text-[9px] sm:text-xs font-black uppercase tracking-[0.15em] border border-white/10 shadow-lg">
-                    <CalendarIcon size={12} /> {dateStr}
+                    <CalendarIcon size={12} /> {selectedDateObject.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
                   </div>
                   {settings.preferences.enableIslamicFeatures && (
                     <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-black/10 backdrop-blur-md rounded-full text-[9px] sm:text-xs font-black uppercase tracking-[0.15em] border border-white/5 text-white">
@@ -100,39 +103,39 @@ const Today: React.FC = () => {
                   )}
                </div>
                
-               <div className="space-y-1 sm:space-y-2">
-                  <h1 className="text-4xl sm:text-7xl font-black tracking-tighter leading-none animate-in slide-in-from-left duration-700">
-                     {timeContext.greeting},
+               <div className="space-y-1">
+                  <h1 className="text-3xl sm:text-6xl font-black tracking-tighter leading-none animate-in slide-in-from-left duration-700">
+                     {isToday ? timeContext.greeting : 'Archived Log'},
                   </h1>
-                  <p className="text-white/80 text-sm sm:text-2xl font-medium max-w-2xl italic opacity-90 leading-relaxed font-serif">
-                     "{timeContext.sub}"
+                  <p className="text-white/80 text-xs sm:text-xl font-medium max-w-2xl italic opacity-90 leading-relaxed font-serif">
+                     {isToday ? `"${timeContext.sub}"` : `Reviewing performance for ${selectedDate}.`}
                   </p>
                </div>
                
-               <div className="flex flex-wrap gap-6 sm:gap-8 pt-2 items-end">
-                  <div className="flex flex-col gap-0.5 sm:gap-1">
-                     <span className="text-xl sm:text-3xl font-black tracking-tight tabular-nums">{(getFormattedCurrency(dailySpend) || "").split('.')[0]}</span>
-                     <span className="text-[8px] sm:text-xs font-black uppercase tracking-[0.3em] text-white/50">Spend</span>
+               <div className="flex flex-wrap gap-4 sm:gap-8 pt-1 items-end">
+                  <div className="flex flex-col gap-0.5">
+                     <span className="text-lg sm:text-2xl font-black tracking-tight tabular-nums">{(getFormattedCurrency(dailySpend) || "").split('.')[0]}</span>
+                     <span className="text-[7px] sm:text-[10px] font-black uppercase tracking-[0.3em] text-white/50">Spend</span>
                   </div>
                   
-                  <div className="w-px h-8 sm:h-10 bg-white/10" />
+                  <div className="w-px h-6 sm:h-8 bg-white/10" />
                   
-                  <div className="flex flex-col gap-0.5 sm:gap-1 min-w-[4rem] sm:min-w-[5rem]">
-                     <span className="text-xl sm:text-3xl font-black tracking-tight tabular-nums">{taskStats.completedToday}</span>
+                  <div className="flex flex-col gap-0.5 min-w-[3.5rem] sm:min-w-[5rem]">
+                     <span className="text-lg sm:text-2xl font-black tracking-tight tabular-nums">{taskStats.completedToday}</span>
                      <div className="h-1 w-full bg-white/20 rounded-full overflow-hidden">
                         <div className="h-full bg-white transition-all duration-1000" style={{ width: `${taskProgress}%` }} />
                      </div>
-                     <span className="text-[8px] sm:text-xs font-black uppercase tracking-[0.3em] text-white/50 mt-1">Wins</span>
+                     <span className="text-[7px] sm:text-[10px] font-black uppercase tracking-[0.3em] text-white/50 mt-1">Wins</span>
                   </div>
                   
-                  <div className="w-px h-8 sm:h-10 bg-white/10" />
+                  <div className="w-px h-6 sm:h-8 bg-white/10" />
                   
-                  <div className="flex flex-col gap-0.5 sm:gap-1 min-w-[4rem] sm:min-w-[5rem]">
-                     <span className="text-xl sm:text-3xl font-black tracking-tight tabular-nums">{habitStats.completionRate}%</span>
+                  <div className="flex flex-col gap-0.5 min-w-[3.5rem] sm:min-w-[5rem]">
+                     <span className="text-lg sm:text-2xl font-black tracking-tight tabular-nums">{habitStats.completionRate}%</span>
                      <div className="h-1 w-full bg-white/20 rounded-full overflow-hidden">
                         <div className="h-full bg-white transition-all duration-1000" style={{ width: `${habitStats.completionRate}%` }} />
                      </div>
-                     <span className="text-[8px] sm:text-xs font-black uppercase tracking-[0.3em] text-white/50 mt-1">Flow</span>
+                     <span className="text-[7px] sm:text-[10px] font-black uppercase tracking-[0.3em] text-white/50 mt-1">Flow</span>
                   </div>
                </div>
             </div>
@@ -151,8 +154,8 @@ const Today: React.FC = () => {
                         <ListTodo size={isMobile ? 20 : 24} strokeWidth={2.5} />
                      </div>
                      <div>
-                        <h3 className="font-black text-lg sm:text-2xl text-foreground tracking-tighter uppercase">Your Focus</h3>
-                        <p className="text-[8px] sm:text-[10px] font-black text-muted uppercase tracking-widest mt-0.5">Objectives • Today</p>
+                        <h3 className="font-black text-lg sm:text-2xl text-foreground tracking-tighter uppercase">Daily Tasks</h3>
+                        <p className="text-[8px] sm:text-[10px] font-black text-muted uppercase tracking-widest mt-0.5">Focus • {selectedDate}</p>
                      </div>
                   </div>
                </div>
@@ -198,7 +201,7 @@ const Today: React.FC = () => {
                <div className="bg-surface rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 border border-foreground/5 shadow-sm space-y-4">
                   <div className="flex items-center gap-3">
                      <div className="p-2 bg-primary-50 dark:bg-primary-900/20 text-primary-600 rounded-xl"><Target size={18} strokeWidth={2.5} /></div>
-                     <span className="text-[9px] font-black text-muted uppercase tracking-widest">North Star Focus</span>
+                     <span className="text-[9px] font-black text-muted uppercase tracking-widest">Active Pursuit</span>
                   </div>
                   <div>
                      <h4 className="text-lg font-black text-foreground tracking-tight line-clamp-2">{activeGoal.title}</h4>
@@ -223,18 +226,18 @@ const Today: React.FC = () => {
                      </div>
                      <div>
                         <h3 className="font-black text-lg sm:text-2xl text-foreground tracking-tighter uppercase">Daily Flow</h3>
-                        <p className="text-[8px] sm:text-[10px] font-black text-muted uppercase tracking-widest mt-0.5">Discipline</p>
+                        <p className="text-[8px] sm:text-[10px] font-black text-muted uppercase tracking-widest mt-0.5">Discipline Log</p>
                      </div>
                   </div>
                </div>
 
                <div className="grid grid-cols-1 gap-3 sm:gap-4 flex-1 relative z-10">
                   {todaysHabits.map(habit => (
-                     <HabitCard key={habit.id} habit={habit} isCompleted={habit.completedDates.includes(todayKey)} onToggle={() => toggleHabit(habit.id)} onEdit={() => {}} onDelete={() => {}} onArchive={() => {}} />
+                     <HabitCard key={habit.id} habit={habit} isCompleted={habit.completedDates.includes(selectedDate)} onToggle={() => toggleHabit(habit.id, selectedDate)} onEdit={() => {}} onDelete={() => {}} onArchive={() => {}} />
                   ))}
                   {todaysHabits.length === 0 && (
                      <div className="col-span-full py-10 text-center opacity-30">
-                        <p className="text-[10px] font-black uppercase tracking-widest">No habits scheduled today</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest">No habits scheduled</p>
                      </div>
                   )}
                </div>
@@ -243,9 +246,6 @@ const Today: React.FC = () => {
       </div>
 
       {/* Modals */}
-      {activeModal === 'task' && (
-         <TaskForm onSave={(data) => { addTask(data); setActiveModal(null); }} onClose={() => setActiveModal(null)} />
-      )}
       {selectedTask && (
          <TaskDetail task={selectedTask} onClose={() => setSelectedTask(null)} onToggle={() => toggleTask(selectedTask.id)} onEdit={() => { setEditingTask(selectedTask); setSelectedTask(null); }} onDelete={() => deleteTask(selectedTask.id)} onToggleSubtask={(sid) => toggleSubtask(selectedTask.id, sid)} />
       )}

@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useMemo } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { 
@@ -52,11 +53,10 @@ export const Layout: React.FC = () => {
     { id: 'sleep', path: '/sleep', label: t.nav.sleep, icon: BedDouble },
     { id: 'stats', path: '/statistics', label: t.nav.stats, icon: BarChart3 },
     { id: 'reports', path: '/reports', label: 'Reports', icon: FileText },
-    { id: 'settings', path: '/settings', label: t.nav.settings, icon: Settings },
   ];
 
   const tabs = allRoutes.filter(route => {
-    if (['today', 'settings'].includes(route.id)) return true;
+    if (['today'].includes(route.id)) return true;
     if (settings?.disabledModules?.includes(route.id)) return false;
     if (route.id === 'deen' && !settings?.preferences?.enableIslamicFeatures) return false;
     return true;
@@ -107,7 +107,7 @@ export const Layout: React.FC = () => {
           <div className="flex-1 relative flex items-center justify-center h-full mx-4 overflow-hidden">
              <nav 
                ref={scrollContainerRef} 
-               className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth py-2 mask-linear-fade"
+               className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth py-2 px-4"
              >
                {tabs.map((route) => {
                  const isActive = location.pathname === route.path || (route.path !== '/' && location.pathname.startsWith(route.path));
@@ -116,21 +116,22 @@ export const Layout: React.FC = () => {
                      key={route.id}
                      to={route.path}
                      className={`
-                       flex items-center gap-2 px-4 py-2 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all duration-500 whitespace-nowrap group relative
+                       flex items-center gap-2.5 px-4 py-2 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all duration-500 whitespace-nowrap group relative
                        ${isActive 
                          ? 'active-nav-item bg-primary text-white shadow-xl shadow-primary/20 scale-105 z-10' 
                          : 'text-foreground/40 hover:text-foreground hover:bg-foreground/5'}
                      `}
                    >
                      {/* Subtle icon highlight for active state */}
-                     <div className={`relative transition-transform duration-500 ${isActive ? 'rotate-[360deg]' : 'group-hover:scale-110'}`}>
+                     <div className={`relative shrink-0 flex items-center justify-center transition-transform duration-500 ${isActive ? 'rotate-[360deg]' : 'group-hover:scale-110'}`}>
                         <route.icon 
                           size={16} 
                           strokeWidth={isActive ? 3 : 2.5} 
+                          className="relative z-10"
                         />
-                        {isActive && <div className="absolute inset-0 bg-white/20 blur-md rounded-full -z-10 animate-pulse" />}
+                        {isActive && <div className="absolute inset-[-4px] bg-white/20 blur-md rounded-full -z-10 animate-pulse" />}
                      </div>
-                     <span className={isActive ? 'block' : 'hidden xl:block'}>
+                     <span className={`leading-none ${isActive ? 'block' : 'hidden xl:block'}`}>
                        {route.label}
                      </span>
                      
@@ -164,7 +165,6 @@ export const Layout: React.FC = () => {
                  ${isActive ? 'bg-primary text-white shadow-xl shadow-primary/20' : 'bg-foreground/5 text-foreground/40 hover:bg-foreground/10 hover:text-foreground'}
                `}
              >
-                {/* Fix: Wrapped children in a function to correctly access isActive from NavLink */}
                 {({ isActive }) => (
                   <>
                     <Settings size={17} strokeWidth={isActive ? 3 : 2.5} />
@@ -182,14 +182,6 @@ export const Layout: React.FC = () => {
           <Outlet />
         </div>
       </main>
-      
-      {/* Dynamic Navigation Gradient Overlay for scroll containers */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        .mask-linear-fade {
-          mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-          -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-        }
-      `}} />
     </div>
   );
 };
