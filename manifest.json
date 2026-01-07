@@ -1,16 +1,15 @@
-
 {
   "short_name": "LifeOS",
   "name": "LifeOS - Productivity System",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/4345/4345517.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/10832/10832132.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/4345/4345517.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/10832/10832132.png",
       "sizes": "192x192",
       "type": "image/png"
     }
@@ -18,7 +17,7 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "theme_color": "#4f46e5",
+  "theme_color": "#f43f5e",
   "background_color": "#ffffff",
   "orientation": "portrait",
   "description": "A beautiful, minimalist all-in-one productivity app."
