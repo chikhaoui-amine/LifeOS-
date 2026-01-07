@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useMemo } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { 
@@ -89,16 +90,16 @@ export const Layout: React.FC = () => {
       <header className="shrink-0 z-50 sticky top-0 transition-all duration-300 safe-top pt-2 sm:pt-3 px-2 sm:px-4">
         <div className="max-w-[1400px] mx-auto w-full bg-surface/80 backdrop-blur-2xl border border-foreground/10 rounded-3xl px-3 sm:px-6 h-16 flex items-center justify-between shadow-2xl ring-1 ring-white/10 dark:ring-black/20">
           
-          {/* Enhanced Logo Section - Styled to match user provided image */}
+          {/* Enhanced Logo Section */}
           <div className="flex items-center gap-3 shrink-0 pl-1">
             <div className="relative group cursor-pointer" onClick={() => window.location.href = '#'}>
-              <div className="relative w-9 h-9 bg-[#f43f5e] rounded-full flex items-center justify-center text-white shadow-lg shadow-rose-500/25 transform group-hover:rotate-6 transition-all group-active:scale-90">
-                <Zap size={18} fill="white" stroke="white" strokeWidth={1} className="animate-pulse" />
+              <div className="relative w-9 h-9 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/25 transform group-hover:rotate-6 transition-all group-active:scale-90">
+                <Zap size={18} fill="white" className="animate-pulse" />
               </div>
             </div>
             <div className="hidden lg:flex items-baseline gap-0.5">
               <span className="font-black text-xl tracking-tighter text-foreground">Life</span>
-              <span className="font-bold text-xl tracking-tighter text-[#f43f5e]">OS</span>
+              <span className="font-bold text-xl tracking-tighter text-primary">OS</span>
             </div>
           </div>
 
