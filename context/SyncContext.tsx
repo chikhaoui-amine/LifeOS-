@@ -12,6 +12,7 @@ import { useIslamic } from './IslamicContext';
 import { useTheme } from './ThemeContext';
 import { useVisionBoard } from './VisionBoardContext';
 import { useReports } from './ReportContext';
+import { useDigitalWellness } from './DigitalWellnessContext';
 import { FirebaseService, User } from '../services/FirebaseService';
 import { BackupService } from '../services/BackupService';
 import { useToast } from './ToastContext';
@@ -40,6 +41,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { savedThemes } = useTheme();
   const { items: visionBoard, loading: visionLoading } = useVisionBoard();
   const { reports, loading: reportsLoading } = useReports();
+  const { blockedApps, settings: dwSettings, stats: dwStats } = useDigitalWellness();
   
   const { showToast } = useToast();
 
@@ -51,16 +53,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const lastCloudTsRef = useRef<number>(0);
   const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Critical check: Is local data fully initialized from disk?
   const isLocalReady = !habitsLoading && !tasksLoading && !journalLoading && !goalsLoading && !financeLoading && !mealsLoading && !sleepLoading && !timeLoading && !deenLoading && !visionLoading && !reportsLoading;
-
-  useEffect(() => {
-    const unsubscribe = FirebaseService.init((currentUser) => {
-      setUser(currentUser);
-      setGoogleConnected(!!currentUser);
-    });
-    return () => unsubscribe();
-  }, [setGoogleConnected]);
 
   const getCurrentSnapshot = useCallback((): BackupData => {
     const state = BackupService.createBackupData(habits, tasks, settings);
@@ -79,19 +72,27 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     state.adhkar = adhkar;
     state.islamicSettings = islamicSettings;
     state.customThemes = savedThemes;
+    // Inject Digital Wellness manually to avoid type errors in BackupData interface
+    (state as any).wellnessApps = blockedApps;
+    (state as any).wellnessSettings = dwSettings;
+    (state as any).wellnessStats = dwStats;
     return state;
   }, [
-    habits, habitCategories, tasks, settings, 
-    journal, goals, visionBoard, reports,
+    habits, habitCategories, tasks, settings, journal, goals, visionBoard, reports,
     accounts, transactions, budgets, savingsGoals, currency,
-    recipes, foods, mealPlans, shoppingList, 
-    sleepLogs, sleepSettings,
-    timeBlocks, 
-    prayers, quran, adhkar, islamicSettings,
-    savedThemes
+    recipes, foods, mealPlans, shoppingList, sleepLogs, sleepSettings,
+    timeBlocks, prayers, quran, adhkar, islamicSettings, savedThemes,
+    blockedApps, dwSettings, dwStats
   ]);
 
-  // Handle Incoming Cloud Data
+  useEffect(() => {
+    const unsubscribe = FirebaseService.init((currentUser) => {
+      setUser(currentUser);
+      setGoogleConnected(!!currentUser);
+    });
+    return () => unsubscribe();
+  }, [setGoogleConnected]);
+
   useEffect(() => {
     if (!user || !isLocalReady) return;
 
@@ -102,13 +103,13 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const currentLocal = getCurrentSnapshot();
       const localTs = new Date(currentLocal.exportDate).getTime();
 
-      // Only apply if cloud is newer than what we currently have in memory AND newer than last known cloud sync
+      // Only sync if cloud is newer than local AND newer than the last thing we synced
       if (cloudTs <= lastCloudTsRef.current || cloudTs <= localTs) {
           lastCloudTsRef.current = Math.max(lastCloudTsRef.current, cloudTs);
           return;
       }
 
-      console.log(`LifeOS: Remote is newer (${cloudData.exportDate}). Syncing...`);
+      console.log(`Cloud Sync: Mirroring remote state (${cloudData.exportDate})`);
       isIncomingSync.current = true;
       setIsSyncing(true);
       
@@ -116,20 +117,19 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await BackupService.performReplace(cloudData);
         lastCloudTsRef.current = cloudTs;
         setLastSyncedAt(new Date());
-        showToast('System Synced', 'info');
+        showToast('Cloud Data Synchronized', 'info');
       } catch (e) {
-        console.error("Sync Download Error:", e);
+        console.error("Mirror Sync Failure:", e);
       } finally {
         setIsSyncing(false);
-        // Delay resetting flag to allow state updates to settle without triggering re-upload
-        setTimeout(() => { isIncomingSync.current = false; }, 2500);
+        // Important: keep the ref active for a few seconds to let context updates settle
+        setTimeout(() => { isIncomingSync.current = false; }, 3000);
       }
     });
 
     return () => unsubscribe();
   }, [user, isLocalReady, getCurrentSnapshot, showToast]);
 
-  // Automatic Outbound Cloud Sync
   useEffect(() => {
     if (!user || !isLocalReady || isSyncing || isIncomingSync.current) return;
     
@@ -138,19 +138,16 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     syncDebounceRef.current = setTimeout(async () => {
       const data = getCurrentSnapshot();
       const currentTs = new Date(data.exportDate).getTime();
-      
-      // Only upload if local is actually newer than our last known sync point
       if (currentTs <= lastCloudTsRef.current) return;
 
       try {
         await FirebaseService.saveUserData(data);
         lastCloudTsRef.current = currentTs;
         setLastSyncedAt(new Date());
-        console.log("LifeOS: Cloud updated with local changes.");
       } catch (e) {
-        console.error("Auto-Sync Upload Error:", e);
+        console.error("Auto-Mirror Failure:", e);
       }
-    }, 20000); // 20s debounce
+    }, 10000); 
 
     return () => {
       if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
@@ -159,7 +156,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const syncNow = async () => {
     if (!user) {
-        showToast("Google connection required", "error");
+        showToast("Authorization required", "error");
         return;
     }
     setIsSyncing(true);
@@ -168,9 +165,9 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await FirebaseService.saveUserData(data);
         lastCloudTsRef.current = new Date(data.exportDate).getTime();
         setLastSyncedAt(new Date());
-        showToast('Cloud Sync Successful', 'success');
+        showToast('Manual Mirror Successful', 'success');
     } catch(e) {
-        showToast('Sync Communication Error', 'error');
+        showToast('Mirror Failure', 'error');
     } finally {
         setIsSyncing(false);
     }

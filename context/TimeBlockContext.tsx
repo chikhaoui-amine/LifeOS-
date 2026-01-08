@@ -1,7 +1,7 @@
-
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { TimeBlock } from '../types';
 import { storage } from '../utils/storage';
+import { STORAGE_KEYS, SYNC_RELOAD_EVENT } from '../services/BackupService';
 
 interface TimeBlockContextType {
   timeBlocks: TimeBlock[];
@@ -15,66 +15,57 @@ interface TimeBlockContextType {
 
 const TimeBlockContext = createContext<TimeBlockContextType | undefined>(undefined);
 
-const BLOCKS_STORAGE_KEY = 'lifeos_time_blocks_v1';
-
 export const TimeBlockProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load Data
-  useEffect(() => {
-    const loadData = async () => {
-      const storedBlocks = await storage.load<TimeBlock[]>(BLOCKS_STORAGE_KEY);
-      if (storedBlocks) setTimeBlocks(storedBlocks);
-      setLoading(false);
-    };
-    loadData();
+  const loadData = useCallback(async () => {
+    const storedBlocks = await storage.load<TimeBlock[]>(STORAGE_KEYS.TIME_BLOCKS);
+    if (storedBlocks) setTimeBlocks(storedBlocks);
+    setLoading(false);
   }, []);
 
-  // Sync to Storage
   useEffect(() => {
-    if (!loading) {
-      storage.save(BLOCKS_STORAGE_KEY, timeBlocks);
-    }
-  }, [timeBlocks, loading]);
+    loadData();
+    window.addEventListener(SYNC_RELOAD_EVENT, loadData);
+    return () => window.removeEventListener(SYNC_RELOAD_EVENT, loadData);
+  }, [loadData]);
 
-  // Helper: Calculate duration in minutes from "HH:mm" strings
   const calcDuration = (start: string, end: string) => {
     const [h1, m1] = start.split(':').map(Number);
     const [h2, m2] = end.split(':').map(Number);
     return (h2 * 60 + m2) - (h1 * 60 + m1);
   };
 
+  const persist = async (updated: TimeBlock[]) => {
+    setTimeBlocks(updated);
+    await storage.save(STORAGE_KEYS.TIME_BLOCKS, updated);
+  };
+
   const addBlock = async (data: Omit<TimeBlock, 'id' | 'duration' | 'completed'>) => {
     const duration = calcDuration(data.startTime, data.endTime);
-    const newBlock: TimeBlock = {
-      ...data,
-      id: Date.now().toString(),
-      duration,
-      completed: false,
-    };
-    setTimeBlocks(prev => [...prev, newBlock]);
+    const newBlock: TimeBlock = { ...data, id: Date.now().toString(), duration, completed: false };
+    await persist([...timeBlocks, newBlock]);
   };
 
   const updateBlock = async (id: string, updates: Partial<TimeBlock>) => {
-    setTimeBlocks(prev => prev.map(b => {
+    const updated = timeBlocks.map(b => {
       if (b.id === id) {
-        const updated = { ...b, ...updates };
-        if (updates.startTime || updates.endTime) {
-          updated.duration = calcDuration(updated.startTime, updated.endTime);
-        }
-        return updated;
+        const up = { ...b, ...updates };
+        if (updates.startTime || updates.endTime) up.duration = calcDuration(up.startTime, up.endTime);
+        return up;
       }
       return b;
-    }));
+    });
+    await persist(updated);
   };
 
   const deleteBlock = async (id: string) => {
-    setTimeBlocks(prev => prev.filter(b => b.id !== id));
+    await persist(timeBlocks.filter(b => b.id !== id));
   };
 
   const toggleBlock = async (id: string) => {
-    setTimeBlocks(prev => prev.map(b => b.id === id ? { ...b, completed: !b.completed } : b));
+    await persist(timeBlocks.map(b => b.id === id ? { ...b, completed: !b.completed } : b));
   };
 
   const getBlocksForDate = (date: string) => {
@@ -84,15 +75,7 @@ export const TimeBlockProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   return (
-    <TimeBlockContext.Provider value={{
-      timeBlocks,
-      loading,
-      addBlock,
-      updateBlock,
-      deleteBlock,
-      toggleBlock,
-      getBlocksForDate
-    }}>
+    <TimeBlockContext.Provider value={{ timeBlocks, loading, addBlock, updateBlock, deleteBlock, toggleBlock, getBlocksForDate }}>
       {children}
     </TimeBlockContext.Provider>
   );

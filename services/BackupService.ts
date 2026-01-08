@@ -34,13 +34,16 @@ export const STORAGE_KEYS = {
   DEEN_SETTINGS: 'lifeos_islamic_settings_v1',
   CUSTOM_THEMES: 'lifeos_custom_themes',
   ACTIVE_THEME: 'lifeos_active_theme_object',
+  WELLNESS_APPS: 'lifeos_wellness_apps_v1',
+  WELLNESS_SETTINGS: 'lifeos_wellness_settings_v1',
+  WELLNESS_STATS: 'lifeos_wellness_stats_v1',
 };
 
 export const BackupService = {
   createBackupData: (habits: Habit[], tasks: Task[], settings: AppSettings): BackupData => {
     return {
-      version: "1.6.0",
-      appVersion: "1.6.0",
+      version: "1.8.0",
+      appVersion: "1.8.0",
       exportDate: new Date().toISOString(),
       habits: habits || [],
       tasks: tasks || [],
@@ -51,7 +54,7 @@ export const BackupService = {
   downloadBackup: async (data: BackupData) => {
     const jsonString = JSON.stringify(data, null, 2);
     const dateStr = new Date().toISOString().split('T')[0];
-    const fileName = `LifeOS_Backup_${dateStr}.json`;
+    const fileName = `LifeOS_Master_Backup_${dateStr}.json`;
     const blob = new Blob([jsonString], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -65,7 +68,7 @@ export const BackupService = {
 
   validateBackup: (data: any): boolean => {
     if (!data || typeof data !== 'object') return false;
-    return !!data.settings && !!data.version;
+    return !!data.settings && (!!data.habits || !!data.tasks);
   },
 
   readBackupFile: (file: File): Promise<BackupData> => {
@@ -85,51 +88,52 @@ export const BackupService = {
 
   performReplace: async (data: BackupData) => {
     try {
-        // Core Modules
-        if (data.settings) await storage.save(STORAGE_KEYS.SETTINGS, data.settings);
-        if (data.habits) await storage.save(STORAGE_KEYS.HABITS, data.habits);
-        if (data.tasks) await storage.save(STORAGE_KEYS.TASKS, data.tasks);
-        if (data.habitCategories) await storage.save(STORAGE_KEYS.HABIT_CATEGORIES, data.habitCategories);
-        if (data.journal) await storage.save(STORAGE_KEYS.JOURNAL, data.journal);
-        if (data.goals) await storage.save(STORAGE_KEYS.GOALS, data.goals);
-        if (data.visionBoard) await storage.save(STORAGE_KEYS.VISION_BOARD, data.visionBoard);
-        if (data.reports) await storage.save(STORAGE_KEYS.REPORTS, data.reports);
-        if (data.timeBlocks) await storage.save(STORAGE_KEYS.TIME_BLOCKS, data.timeBlocks);
+        const ops = [];
+        if (data.settings) ops.push(storage.save(STORAGE_KEYS.SETTINGS, data.settings));
+        if (data.habits) ops.push(storage.save(STORAGE_KEYS.HABITS, data.habits));
+        if (data.habitCategories) ops.push(storage.save(STORAGE_KEYS.HABIT_CATEGORIES, data.habitCategories));
+        if (data.tasks) ops.push(storage.save(STORAGE_KEYS.TASKS, data.tasks));
+        if (data.goals) ops.push(storage.save(STORAGE_KEYS.GOALS, data.goals));
+        if (data.journal) ops.push(storage.save(STORAGE_KEYS.JOURNAL, data.journal));
+        if (data.visionBoard) ops.push(storage.save(STORAGE_KEYS.VISION_BOARD, data.visionBoard));
+        if (data.reports) ops.push(storage.save(STORAGE_KEYS.REPORTS, data.reports));
+        if (data.timeBlocks) ops.push(storage.save(STORAGE_KEYS.TIME_BLOCKS, data.timeBlocks));
 
-        // Finance
         if (data.finance) {
-          await storage.save(STORAGE_KEYS.FINANCE_ACCOUNTS, data.finance.accounts || []);
-          await storage.save(STORAGE_KEYS.FINANCE_TXS, data.finance.transactions || []);
-          await storage.save(STORAGE_KEYS.FINANCE_BUDGETS, data.finance.budgets || []);
-          await storage.save(STORAGE_KEYS.FINANCE_GOALS, data.finance.savingsGoals || []);
-          if (data.finance.currency) await storage.save(STORAGE_KEYS.FINANCE_CURRENCY, data.finance.currency);
+          ops.push(storage.save(STORAGE_KEYS.FINANCE_ACCOUNTS, data.finance.accounts || []));
+          ops.push(storage.save(STORAGE_KEYS.FINANCE_TXS, data.finance.transactions || []));
+          ops.push(storage.save(STORAGE_KEYS.FINANCE_BUDGETS, data.finance.budgets || []));
+          ops.push(storage.save(STORAGE_KEYS.FINANCE_GOALS, data.finance.savingsGoals || []));
+          if (data.finance.currency) ops.push(storage.save(STORAGE_KEYS.FINANCE_CURRENCY, data.finance.currency));
         }
         
-        // Health/Meals
         if (data.meals) {
-          await storage.save(STORAGE_KEYS.MEAL_RECIPES, data.meals.recipes || []);
-          await storage.save(STORAGE_KEYS.MEAL_FOODS, data.meals.foods || []);
-          await storage.save(STORAGE_KEYS.MEAL_PLANS, data.meals.mealPlans || []);
-          await storage.save(STORAGE_KEYS.MEAL_SHOPPING, data.meals.shoppingList || []);
+          ops.push(storage.save(STORAGE_KEYS.MEAL_RECIPES, data.meals.recipes || []));
+          ops.push(storage.save(STORAGE_KEYS.MEAL_FOODS, data.meals.foods || []));
+          ops.push(storage.save(STORAGE_KEYS.MEAL_PLANS, data.meals.mealPlans || []));
+          ops.push(storage.save(STORAGE_KEYS.MEAL_SHOPPING, data.meals.shoppingList || []));
         }
         
-        if (data.sleepLogs) await storage.save(STORAGE_KEYS.SLEEP_LOGS, data.sleepLogs);
-        if (data.sleepSettings) await storage.save(STORAGE_KEYS.SLEEP_SETTINGS, data.sleepSettings);
+        if (data.sleepLogs) ops.push(storage.save(STORAGE_KEYS.SLEEP_LOGS, data.sleepLogs));
+        if (data.sleepSettings) ops.push(storage.save(STORAGE_KEYS.SLEEP_SETTINGS, data.sleepSettings));
         
-        // Deen
-        if (data.prayers) await storage.save(STORAGE_KEYS.DEEN_PRAYERS, data.prayers);
-        if (data.quran) await storage.save(STORAGE_KEYS.DEEN_QURAN, data.quran);
-        if (data.adhkar) await storage.save(STORAGE_KEYS.DEEN_ADHKAR, data.adhkar);
-        if (data.islamicSettings) await storage.save(STORAGE_KEYS.DEEN_SETTINGS, data.islamicSettings);
+        if (data.prayers) ops.push(storage.save(STORAGE_KEYS.DEEN_PRAYERS, data.prayers));
+        if (data.quran) ops.push(storage.save(STORAGE_KEYS.DEEN_QURAN, data.quran));
+        if (data.adhkar) ops.push(storage.save(STORAGE_KEYS.DEEN_ADHKAR, data.adhkar));
+        if (data.islamicSettings) ops.push(storage.save(STORAGE_KEYS.DEEN_SETTINGS, data.islamicSettings));
         
-        // Themes
-        if (data.customThemes) await storage.save(STORAGE_KEYS.CUSTOM_THEMES, data.customThemes);
+        if (data.customThemes) ops.push(storage.save(STORAGE_KEYS.CUSTOM_THEMES, data.customThemes));
+
+        // Digital Wellness Sync
+        if ((data as any).wellnessApps) ops.push(storage.save(STORAGE_KEYS.WELLNESS_APPS, (data as any).wellnessApps));
+        if ((data as any).wellnessSettings) ops.push(storage.save(STORAGE_KEYS.WELLNESS_SETTINGS, (data as any).wellnessSettings));
+        if ((data as any).wellnessStats) ops.push(storage.save(STORAGE_KEYS.WELLNESS_STATS, (data as any).wellnessStats));
         
-        // Dispatch global event for context refreshing
+        await Promise.all(ops);
         window.dispatchEvent(new CustomEvent(SYNC_RELOAD_EVENT));
         return true;
     } catch (e) {
-        console.error("Critical Restore Error:", e);
+        console.error("Critical Sync Replace Failure:", e);
         throw e;
     }
   },

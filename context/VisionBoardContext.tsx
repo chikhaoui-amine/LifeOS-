@@ -1,7 +1,7 @@
-
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { VisionItem } from '../types';
 import { storage } from '../utils/storage';
+import { STORAGE_KEYS, SYNC_RELOAD_EVENT } from '../services/BackupService';
 
 interface VisionBoardContextType {
   items: VisionItem[];
@@ -13,28 +13,26 @@ interface VisionBoardContextType {
 
 const VisionBoardContext = createContext<VisionBoardContextType | undefined>(undefined);
 
-const VISION_STORAGE_KEY = 'lifeos_vision_board_v1';
-
 export const VisionBoardProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<VisionItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load Data
-  useEffect(() => {
-    const loadData = async () => {
-      const storedItems = await storage.load<VisionItem[]>(VISION_STORAGE_KEY);
-      if (storedItems) setItems(storedItems);
-      setLoading(false);
-    };
-    loadData();
+  const loadData = useCallback(async () => {
+    const data = await storage.load<VisionItem[]>(STORAGE_KEYS.VISION_BOARD);
+    if (data) setItems(data);
+    setLoading(false);
   }, []);
 
-  // Sync to Storage
   useEffect(() => {
-    if (!loading) {
-      storage.save(VISION_STORAGE_KEY, items);
-    }
-  }, [items, loading]);
+    loadData();
+    window.addEventListener(SYNC_RELOAD_EVENT, loadData);
+    return () => window.removeEventListener(SYNC_RELOAD_EVENT, loadData);
+  }, [loadData]);
+
+  const persist = async (updated: VisionItem[]) => {
+    setItems(updated);
+    await storage.save(STORAGE_KEYS.VISION_BOARD, updated);
+  };
 
   const addItem = async (data: Omit<VisionItem, 'id' | 'createdAt'>) => {
     const newItem: VisionItem = {
@@ -42,15 +40,15 @@ export const VisionBoardProvider: React.FC<{ children: ReactNode }> = ({ childre
       id: Date.now().toString(),
       createdAt: new Date().toISOString(),
     };
-    setItems(prev => [newItem, ...prev]);
+    await persist([newItem, ...items]);
   };
 
   const deleteItem = async (id: string) => {
-    setItems(prev => prev.filter(i => i.id !== id));
+    await persist(items.filter(i => i.id !== id));
   };
 
   const updateItem = async (id: string, updates: Partial<VisionItem>) => {
-    setItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
+    await persist(items.map(i => i.id === id ? { ...i, ...updates } : i));
   };
 
   return (
