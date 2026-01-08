@@ -42,9 +42,9 @@ export const BackupService = {
       version: "1.6.0",
       appVersion: "1.6.0",
       exportDate: new Date().toISOString(),
-      habits,
-      tasks,
-      settings
+      habits: habits || [],
+      tasks: tasks || [],
+      settings: settings
     };
   },
 
@@ -65,7 +65,7 @@ export const BackupService = {
 
   validateBackup: (data: any): boolean => {
     if (!data || typeof data !== 'object') return false;
-    return !!data.settings;
+    return !!data.settings && !!data.version;
   },
 
   readBackupFile: (file: File): Promise<BackupData> => {
@@ -76,8 +76,8 @@ export const BackupService = {
           const text = e.target?.result as string;
           const data = JSON.parse(text);
           if (BackupService.validateBackup(data)) resolve(data as BackupData);
-          else reject(new Error("Invalid format"));
-        } catch (error) { reject(new Error("Parse failed")); }
+          else reject(new Error("Invalid LifeOS backup format"));
+        } catch (error) { reject(new Error("Failed to parse JSON file")); }
       };
       reader.readAsText(file);
     });
@@ -85,6 +85,7 @@ export const BackupService = {
 
   performReplace: async (data: BackupData) => {
     try {
+        // Core Modules
         if (data.settings) await storage.save(STORAGE_KEYS.SETTINGS, data.settings);
         if (data.habits) await storage.save(STORAGE_KEYS.HABITS, data.habits);
         if (data.tasks) await storage.save(STORAGE_KEYS.TASKS, data.tasks);
@@ -95,6 +96,7 @@ export const BackupService = {
         if (data.reports) await storage.save(STORAGE_KEYS.REPORTS, data.reports);
         if (data.timeBlocks) await storage.save(STORAGE_KEYS.TIME_BLOCKS, data.timeBlocks);
 
+        // Finance
         if (data.finance) {
           await storage.save(STORAGE_KEYS.FINANCE_ACCOUNTS, data.finance.accounts || []);
           await storage.save(STORAGE_KEYS.FINANCE_TXS, data.finance.transactions || []);
@@ -103,6 +105,7 @@ export const BackupService = {
           if (data.finance.currency) await storage.save(STORAGE_KEYS.FINANCE_CURRENCY, data.finance.currency);
         }
         
+        // Health/Meals
         if (data.meals) {
           await storage.save(STORAGE_KEYS.MEAL_RECIPES, data.meals.recipes || []);
           await storage.save(STORAGE_KEYS.MEAL_FOODS, data.meals.foods || []);
@@ -113,17 +116,20 @@ export const BackupService = {
         if (data.sleepLogs) await storage.save(STORAGE_KEYS.SLEEP_LOGS, data.sleepLogs);
         if (data.sleepSettings) await storage.save(STORAGE_KEYS.SLEEP_SETTINGS, data.sleepSettings);
         
+        // Deen
         if (data.prayers) await storage.save(STORAGE_KEYS.DEEN_PRAYERS, data.prayers);
         if (data.quran) await storage.save(STORAGE_KEYS.DEEN_QURAN, data.quran);
         if (data.adhkar) await storage.save(STORAGE_KEYS.DEEN_ADHKAR, data.adhkar);
         if (data.islamicSettings) await storage.save(STORAGE_KEYS.DEEN_SETTINGS, data.islamicSettings);
+        
+        // Themes
         if (data.customThemes) await storage.save(STORAGE_KEYS.CUSTOM_THEMES, data.customThemes);
         
-        // Broadcast to all contexts to reload their state from storage
+        // Dispatch global event for context refreshing
         window.dispatchEvent(new CustomEvent(SYNC_RELOAD_EVENT));
         return true;
     } catch (e) {
-        console.error("Master Restore Failed", e);
+        console.error("Critical Restore Error:", e);
         throw e;
     }
   },

@@ -13,7 +13,7 @@ import { useTheme } from './ThemeContext';
 import { useVisionBoard } from './VisionBoardContext';
 import { useReports } from './ReportContext';
 import { FirebaseService, User } from '../services/FirebaseService';
-import { BackupService, STORAGE_KEYS } from '../services/BackupService';
+import { BackupService } from '../services/BackupService';
 import { useToast } from './ToastContext';
 import { BackupData } from '../types';
 
@@ -48,10 +48,11 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   
   const isIncomingSync = useRef(false);
-  const lastCloudUpdateRef = useRef<number>(0);
+  const lastCloudTsRef = useRef<number>(0);
   const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isAllLoaded = !habitsLoading && !tasksLoading && !journalLoading && !goalsLoading && !financeLoading && !mealsLoading && !sleepLoading && !timeLoading && !deenLoading && !visionLoading && !reportsLoading;
+  // Critical check: Is local data fully initialized from disk?
+  const isLocalReady = !habitsLoading && !tasksLoading && !journalLoading && !goalsLoading && !financeLoading && !mealsLoading && !sleepLoading && !timeLoading && !deenLoading && !visionLoading && !reportsLoading;
 
   useEffect(() => {
     const unsubscribe = FirebaseService.init((currentUser) => {
@@ -61,7 +62,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => unsubscribe();
   }, [setGoogleConnected]);
 
-  const getCurrentState = useCallback((): BackupData => {
+  const getCurrentSnapshot = useCallback((): BackupData => {
     const state = BackupService.createBackupData(habits, tasks, settings);
     state.habitCategories = habitCategories;
     state.journal = journal;
@@ -90,83 +91,86 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     savedThemes
   ]);
 
-  // Handle Incoming Cloud Snapshots
+  // Handle Incoming Cloud Data
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isLocalReady) return;
 
     const unsubscribe = FirebaseService.subscribeToUserData(async (cloudData) => {
-      if (!cloudData?.exportDate) return;
+      if (!cloudData || !cloudData.exportDate) return;
       
       const cloudTs = new Date(cloudData.exportDate).getTime();
-      
-      // Determine local timestamp for comparison
-      const localData = getCurrentState();
-      const localTs = new Date(localData.exportDate).getTime();
+      const currentLocal = getCurrentSnapshot();
+      const localTs = new Date(currentLocal.exportDate).getTime();
 
-      // Only apply if cloud is actually NEWER than what we have
-      if (cloudTs <= lastCloudUpdateRef.current || cloudTs <= localTs) return;
+      // Only apply if cloud is newer than what we currently have in memory AND newer than last known cloud sync
+      if (cloudTs <= lastCloudTsRef.current || cloudTs <= localTs) {
+          lastCloudTsRef.current = Math.max(lastCloudTsRef.current, cloudTs);
+          return;
+      }
 
+      console.log(`LifeOS: Remote is newer (${cloudData.exportDate}). Syncing...`);
       isIncomingSync.current = true;
       setIsSyncing(true);
+      
       try {
-        console.log("LifeOS: Cloud data is newer. Syncing down...");
         await BackupService.performReplace(cloudData);
-        lastCloudUpdateRef.current = cloudTs;
+        lastCloudTsRef.current = cloudTs;
         setLastSyncedAt(new Date());
-        showToast('Data Synced from Cloud', 'info');
+        showToast('System Synced', 'info');
       } catch (e) {
-        console.error("Cloud Apply Error:", e);
+        console.error("Sync Download Error:", e);
       } finally {
         setIsSyncing(false);
-        setTimeout(() => { isIncomingSync.current = false; }, 2000);
+        // Delay resetting flag to allow state updates to settle without triggering re-upload
+        setTimeout(() => { isIncomingSync.current = false; }, 2500);
       }
     });
 
     return () => unsubscribe();
-  }, [user, showToast, getCurrentState]);
+  }, [user, isLocalReady, getCurrentSnapshot, showToast]);
 
-  // Handle Automatic Cloud Uploads
+  // Automatic Outbound Cloud Sync
   useEffect(() => {
-    if (!user || isSyncing || isIncomingSync.current || !isAllLoaded) return;
+    if (!user || !isLocalReady || isSyncing || isIncomingSync.current) return;
     
     if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
 
     syncDebounceRef.current = setTimeout(async () => {
-      const data = getCurrentState();
+      const data = getCurrentSnapshot();
       const currentTs = new Date(data.exportDate).getTime();
       
-      // Only upload if we have changed since the last known cloud state
-      if (currentTs <= lastCloudUpdateRef.current) return;
+      // Only upload if local is actually newer than our last known sync point
+      if (currentTs <= lastCloudTsRef.current) return;
 
       try {
         await FirebaseService.saveUserData(data);
-        lastCloudUpdateRef.current = currentTs;
+        lastCloudTsRef.current = currentTs;
         setLastSyncedAt(new Date());
-        console.log("LifeOS: Local changes pushed to cloud.");
+        console.log("LifeOS: Cloud updated with local changes.");
       } catch (e) {
-        console.error("Auto-Sync Upload Failed:", e);
+        console.error("Auto-Sync Upload Error:", e);
       }
-    }, 15000); // 15s debounce for efficiency
+    }, 20000); // 20s debounce
 
     return () => {
       if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
     };
-  }, [user, getCurrentState, isSyncing, isAllLoaded]);
+  }, [user, isLocalReady, isSyncing, getCurrentSnapshot]);
 
   const syncNow = async () => {
     if (!user) {
-        showToast("Connect Google Account first", "error");
+        showToast("Google connection required", "error");
         return;
     }
     setIsSyncing(true);
     try {
-        const data = getCurrentState();
+        const data = getCurrentSnapshot();
         await FirebaseService.saveUserData(data);
-        lastCloudUpdateRef.current = new Date(data.exportDate).getTime();
+        lastCloudTsRef.current = new Date(data.exportDate).getTime();
         setLastSyncedAt(new Date());
-        showToast('Sync Successful', 'success');
+        showToast('Cloud Sync Successful', 'success');
     } catch(e) {
-        showToast('Sync Failed', 'error');
+        showToast('Sync Communication Error', 'error');
     } finally {
         setIsSyncing(false);
     }

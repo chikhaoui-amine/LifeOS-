@@ -27,11 +27,12 @@ const getFirebaseConfig = () => {
       try {
         return JSON.parse(stored);
       } catch (e) {
-        console.error("Failed to parse stored firebase config", e);
+        console.error("Failed to parse custom firebase config", e);
       }
     }
   }
   
+  // Default Project Credentials
   return {
     apiKey: "AIzaSyBVij7Op3syRyNkf74dywyepxnQ1Y94ers",
     authDomain: "lifeos-c12c6.firebaseapp.com",
@@ -59,7 +60,7 @@ const initializeFirebase = () => {
     try {
       app = initializeApp(firebaseConfig);
     } catch (e) {
-      console.error("Firebase init failed:", e);
+      console.error("Firebase Core Initialization failed:", e);
     }
   }
 
@@ -72,21 +73,21 @@ const initializeFirebase = () => {
       provider.addScope('email');
       provider.setCustomParameters({ prompt: 'select_account' });
 
-      // Set persistence to Local
-      setPersistence(auth, browserLocalPersistence).catch(console.error);
+      // Enforce Local Session Persistence
+      setPersistence(auth, browserLocalPersistence).catch(e => console.warn("Persistence set error", e));
 
-      // Enable offline persistence for Firestore
+      // Enable Offline Database Persistence
       if (typeof window !== 'undefined') {
         enableIndexedDbPersistence(db).catch((err) => {
           if (err.code === 'failed-precondition') {
-            console.warn('Firestore Persistence failed: Multiple tabs open');
+            console.warn('Firestore Persistence restricted (Multiple tabs open)');
           } else if (err.code === 'unimplemented') {
-            console.warn('Firestore Persistence failed: Browser not supported');
+            console.warn('Firestore Persistence unsupported by browser');
           }
         });
       }
     } catch(e) {
-      console.error("Firebase services init failed:", e);
+      console.error("Firebase Service Initialization failed:", e);
     }
   }
 };
@@ -106,14 +107,13 @@ export const FirebaseService = {
       if (!auth) return () => {};
     }
     
+    // Crucial for Android APK / Redirect flows
     getRedirectResult(auth)
       .then((result) => {
-        if (result?.user) {
-          console.log("LifeOS Auth: Redirect sign-in successful.");
-        }
+        if (result?.user) console.log("LifeOS Auth: Verified redirect session.");
       })
       .catch((error) => {
-        console.error("Firebase Redirect Result Error:", error);
+        console.error("Firebase Redirect Resolution Error:", error);
       });
 
     return onAuthStateChanged(auth, (user: User | null) => {
@@ -125,14 +125,15 @@ export const FirebaseService = {
   signIn: async (): Promise<User | void> => {
     if (!auth) {
       initializeFirebase();
-      if (!auth) throw new Error("Firebase not configured properly.");
+      if (!auth) throw new Error("Cloud subsystem not configured.");
     }
     
-    const isNative = typeof window !== 'undefined' && 
-      (window.location.protocol === 'file:' || (window as any).Capacitor);
+    // Check if we are in a limited browser environment (native app, file protocol, etc)
+    const isRestrictedEnv = typeof window !== 'undefined' && 
+      (window.location.protocol === 'file:' || (window as any).Capacitor || navigator.userAgent.includes('wv'));
     
     try {
-      if (isNative) {
+      if (isRestrictedEnv) {
         await signInWithRedirect(auth, provider);
         return; 
       } else {
@@ -140,20 +141,16 @@ export const FirebaseService = {
           const result = await signInWithPopup(auth, provider);
           return result.user;
         } catch (popupError: any) {
-          if (popupError.code === 'auth/popup-blocked' || popupError.code === 'auth/cancelled-popup-request') {
+          // Fallback to redirect if popup fails/is blocked
+          if (['auth/popup-blocked', 'auth/cancelled-popup-request', 'auth/popup-closed-by-user'].includes(popupError.code)) {
             await signInWithRedirect(auth, provider);
-          } else if (popupError.code === 'auth/unauthorized-domain') {
-            const hostname = window.location.hostname;
-            const error = new Error(`Domain "${hostname}" is not authorized. Add it to your Firebase Console settings or use a custom Firebase config.`) as any;
-            error.code = 'auth/unauthorized-domain';
-            throw error;
           } else {
             throw popupError;
           }
         }
       }
     } catch (error: any) {
-      console.error("Firebase Sign In Error:", error);
+      console.error("Sign-In Gateway Error:", error);
       throw error;
     }
   },
@@ -164,7 +161,7 @@ export const FirebaseService = {
       await firebaseSignOut(auth);
       FirebaseService.currentUser = null;
     } catch (error) {
-      console.error("Firebase Sign Out Error:", error);
+      console.error("Sign-Out Gateway Error:", error);
       throw error;
     }
   },
@@ -186,12 +183,11 @@ export const FirebaseService = {
         lastUpdated: new Date().toISOString(),
         metadata: {
           platform: navigator.platform,
-          userAgent: navigator.userAgent,
           version: data.appVersion
         }
       }, { merge: true });
     } catch (error) {
-      console.error("Firebase Cloud Save Error:", error);
+      console.error("Firestore Upload Failed:", error);
       throw error;
     }
   },
@@ -202,6 +198,7 @@ export const FirebaseService = {
     const userRef = doc(db, "users", auth.currentUser.uid);
     
     return onSnapshot(userRef, (docSnap) => {
+      // Ignore local writes - only listen to remote changes
       if (docSnap.metadata.hasPendingWrites) return;
 
       if (docSnap.exists()) {
@@ -210,6 +207,8 @@ export const FirebaseService = {
           onDataReceived(content.backupData as BackupData);
         }
       }
+    }, (error) => {
+      console.warn("Firestore Snapshot Subscription error:", error);
     });
   }
 };
