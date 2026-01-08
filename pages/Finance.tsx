@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { DollarSign, Wallet, PieChart, Plus, Search, TrendingUp, TrendingDown, PiggyBank, Settings, ArrowRightLeft, X } from 'lucide-react';
 import { FinanceOverview } from '../components/finance/FinanceOverview';
@@ -27,7 +26,6 @@ const Finance: React.FC = () => {
 
   const income = monthlyTransactions.filter(tx => tx.type === 'income').reduce((acc, tx) => acc + tx.amount, 0);
   const expense = monthlyTransactions.filter(tx => tx.type === 'expense').reduce((acc, tx) => acc + tx.amount, 0);
-  const savings = monthlyTransactions.filter(tx => tx.type === 'savings').reduce((acc, tx) => acc + tx.amount, 0);
 
   const filteredCurrencies = useMemo(() => CURRENCIES.filter(c => 
     c.label.toLowerCase().includes(currencySearch.toLowerCase()) || 
@@ -112,7 +110,7 @@ const Finance: React.FC = () => {
             </div>
 
             {/* Monthly Stats Compact Grid */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-4 border-t border-gray-700/50">
+            <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-700/50">
                <div className="bg-emerald-400/40 backdrop-blur-md rounded-xl p-2.5 sm:p-3 border border-emerald-400/30">
                   <div className="flex items-center gap-1.5 text-emerald-50 mb-0.5 opacity-90">
                      <div className="p-1 bg-emerald-500/40 rounded-md"><TrendingUp size={10} /></div>
@@ -122,7 +120,6 @@ const Finance: React.FC = () => {
                   <span className="text-sm sm:text-lg font-black tracking-tight">{getFormattedCurrency(income)}</span>
                </div>
                
-               {/* Expenses Widget - Red */}
                <div className="bg-rose-500/40 backdrop-blur-md rounded-xl p-2.5 sm:p-3 border border-rose-400/30">
                   <div className="flex items-center gap-1.5 text-rose-50 mb-0.5 opacity-90">
                      <div className="p-1 bg-rose-600/40 rounded-md"><TrendingDown size={10} /></div>
@@ -130,15 +127,6 @@ const Finance: React.FC = () => {
                      <span className="text-[9px] font-black uppercase tracking-widest sm:hidden">Out</span>
                   </div>
                   <span className="text-sm sm:text-lg font-black tracking-tight">{getFormattedCurrency(expense)}</span>
-               </div>
-
-               <div className="bg-blue-500/40 backdrop-blur-md rounded-xl p-2.5 sm:p-3 border border-blue-400/30">
-                  <div className="flex items-center gap-1.5 text-blue-50 mb-0.5 opacity-90">
-                     <div className="p-1 bg-blue-600/40 rounded-md"><PiggyBank size={10} /></div>
-                     <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">Savings</span>
-                     <span className="text-[9px] font-black uppercase tracking-widest sm:hidden">Save</span>
-                  </div>
-                  <span className="text-sm sm:text-lg font-black tracking-tight">{getFormattedCurrency(savings)}</span>
                </div>
             </div>
          </div>

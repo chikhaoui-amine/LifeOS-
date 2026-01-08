@@ -330,26 +330,24 @@ export interface SavingsGoal {
 
 export type PrayerName = 'Fajr' | 'Sunrise' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Isha';
 
+export type DeenStatus = 'on-time' | 'late' | 'missed' | 'none';
+
+export interface SunnahEntry {
+  id: string;
+  title: string;
+  rakats: string | number;
+  time: string;
+  status: DeenStatus;
+}
+
 export interface DailyPrayers {
   date: string;
-  fajr: boolean;
-  dhuhr: boolean;
-  asr: boolean;
-  maghrib: boolean;
-  isha: boolean;
-  fajrQadha?: boolean;
-  dhuhrQadha?: boolean;
-  asrQadha?: boolean;
-  maghribQadha?: boolean;
-  ishaQadha?: boolean;
-  sunnahFajr?: boolean;
-  sunnahDhuhr?: boolean;
-  sunnahAsr?: boolean;
-  sunnahMaghrib?: boolean;
-  sunnahIsha?: boolean;
-  witr?: boolean;
-  tahajjud?: boolean;
-  duha?: boolean;
+  fajr: DeenStatus;
+  dhuhr: DeenStatus;
+  asr: DeenStatus;
+  maghrib: DeenStatus;
+  isha: DeenStatus;
+  sunnahs: SunnahEntry[];
 }
 
 export interface QuranProgress {
@@ -360,9 +358,9 @@ export interface QuranProgress {
 
 export interface AdhkarProgress {
   date: string;
-  morningCompleted: boolean;
-  eveningCompleted: boolean;
-  nightCompleted: boolean;
+  morningStatus: DeenStatus;
+  eveningStatus: DeenStatus;
+  nightStatus: DeenStatus;
   morningCount: number;
   eveningCount: number;
   nightCount: number;

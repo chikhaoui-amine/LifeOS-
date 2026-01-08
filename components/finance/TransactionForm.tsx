@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { X, Calendar, Tag, ArrowRightLeft, TrendingUp, TrendingDown, Wallet, Plus, ArrowLeft, PiggyBank } from 'lucide-react';
 import { useFinance, CURRENCIES } from '../../context/FinanceContext';
@@ -18,15 +17,14 @@ const CATEGORIES = {
 export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, type: initialType = 'expense' }) => {
   const { accounts, addTransaction, currency } = useFinance();
   
-  // Default to expense if passed type is transfer (legacy fix) or invalid
-  const validInitialType = initialType === 'savings' ? 'savings' : (initialType === 'income' ? 'income' : 'expense');
+  // Default to expense if passed type is invalid for new UI
+  const validInitialType = initialType === 'income' ? 'income' : 'expense';
   
   const [type, setType] = useState<TransactionType>(validInitialType);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState(CATEGORIES[validInitialType][0]);
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
-  const [toAccountId, setToAccountId] = useState(accounts.length > 1 ? accounts[1].id : '');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   
   // Custom Category State
@@ -42,17 +40,17 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, type:
     await addTransaction({
       amount: parseFloat(amount),
       type,
-      category: type === 'savings' ? 'Savings' : category,
-      description: description || (type === 'savings' ? 'Savings' : category),
+      category,
+      description: description || category,
       date,
       accountId,
-      toAccountId: type === 'savings' ? toAccountId : undefined,
       tags: []
     });
     onClose();
   };
 
   const handleTypeChange = (t: TransactionType) => {
+    if (t === 'savings') return; // Should not happen with UI removal
     setType(t);
     setCategory(CATEGORIES[t][0]);
     setIsCustomCategory(false);
@@ -72,8 +70,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, type:
 
         {/* Type Switcher */}
         <div className="p-2 bg-gray-50 dark:bg-gray-900/50 sticky top-[60px] z-10">
-           <div className="grid grid-cols-3 gap-1">
-             {(['expense', 'income', 'savings'] as const).map(t => (
+           <div className="grid grid-cols-2 gap-1">
+             {(['expense', 'income'] as const).map(t => (
                <button
                  key={t}
                  type="button"
@@ -82,7 +80,6 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, type:
                >
                  {t === 'expense' && <TrendingDown size={16} className="text-red-500" />}
                  {t === 'income' && <TrendingUp size={16} className="text-green-500" />}
-                 {t === 'savings' && <PiggyBank size={16} className="text-blue-500" />}
                  <span className="capitalize">{t}</span>
                </button>
              ))}
@@ -101,7 +98,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, type:
                    value={amount}
                    onChange={e => setAmount(e.target.value)}
                    placeholder="0.00"
-                   className={`w-full pl-12 pr-4 py-4 rounded-2xl bg-gray-50 dark:bg-gray-900/50 border-none text-3xl font-bold outline-none focus:ring-2 focus:ring-primary-500/20 transition-all ${type === 'expense' ? 'text-red-500' : type === 'income' ? 'text-green-500' : 'text-blue-500'}`}
+                   className={`w-full pl-12 pr-4 py-4 rounded-2xl bg-gray-50 dark:bg-gray-900/50 border-none text-3xl font-bold outline-none focus:ring-2 focus:ring-primary-500/20 transition-all ${type === 'expense' ? 'text-red-500' : 'text-green-500'}`}
                    autoFocus
                    step="0.01"
                  />
@@ -111,7 +108,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, type:
            {/* Accounts */}
            <div className="grid grid-cols-1 gap-4">
               <div>
-                 <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-1">{type === 'savings' ? 'From Account' : 'Account'}</label>
+                 <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-1">Account</label>
                  <select 
                    value={accountId}
                    onChange={e => setAccountId(e.target.value)}
@@ -122,69 +119,52 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, type:
                     ))}
                  </select>
               </div>
-
-              {type === 'savings' && (
-                 <div>
-                    <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-1">To Account (Savings)</label>
-                    <select 
-                      value={toAccountId}
-                      onChange={e => setToAccountId(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900/50 border-none text-foreground font-medium outline-none focus:ring-2 focus:ring-primary-500/20"
-                    >
-                       {accounts.filter(a => a.id !== accountId).map(acc => (
-                          <option key={acc.id} value={acc.id}>{acc.name} ({currencySymbol}{acc.balance})</option>
-                       ))}
-                    </select>
-                 </div>
-              )}
            </div>
 
-           {/* Category (Hide for savings) */}
-           {type !== 'savings' && (
-             <div>
-                <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-2">Category</label>
-                
-                {!isCustomCategory ? (
-                  <div className="flex flex-wrap gap-2">
-                     {CATEGORIES[type].map(cat => (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => setCategory(cat)}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${category === cat ? 'bg-primary-50 border-primary-500 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400' : 'bg-surface border-gray-200 dark:border-gray-700 text-muted'}`}
-                        >
-                           {cat}
-                        </button>
-                     ))}
-                     <button
+           {/* Category */}
+           <div>
+              <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-2">Category</label>
+              
+              {!isCustomCategory ? (
+                <div className="flex flex-wrap gap-2">
+                   {CATEGORIES[type as 'expense' | 'income'].map(cat => (
+                      <button
+                        key={cat}
                         type="button"
-                        onClick={() => { setIsCustomCategory(true); setCategory(''); }}
-                        className="px-3 py-1.5 rounded-lg text-sm font-medium border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 hover:text-primary-600 hover:border-primary-500 transition-all flex items-center gap-1"
-                     >
-                        <Plus size={14} /> Custom
-                     </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-200">
-                     <button 
-                       type="button" 
-                       onClick={() => { setIsCustomCategory(false); setCategory(CATEGORIES[type][0]); }}
-                       className="p-3 bg-gray-100 dark:bg-gray-800 rounded-xl text-muted hover:text-foreground"
-                     >
-                        <ArrowLeft size={18} />
-                     </button>
-                     <input 
-                        type="text"
-                        value={category}
-                        onChange={(e) => setCategory(e.target.value)}
-                        placeholder="Enter category name..."
-                        className="flex-1 px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900/50 border-none text-foreground font-medium outline-none focus:ring-2 focus:ring-primary-500/20"
-                        autoFocus
-                     />
-                  </div>
-                )}
-             </div>
-           )}
+                        onClick={() => setCategory(cat)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${category === cat ? 'bg-primary-50 border-primary-500 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400' : 'bg-surface border-gray-200 dark:border-gray-700 text-muted'}`}
+                      >
+                         {cat}
+                      </button>
+                   ))}
+                   <button
+                      type="button"
+                      onClick={() => { setIsCustomCategory(true); setCategory(''); }}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 hover:text-primary-600 hover:border-primary-500 transition-all flex items-center gap-1"
+                   >
+                      <Plus size={14} /> Custom
+                   </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-200">
+                   <button 
+                     type="button" 
+                     onClick={() => { setIsCustomCategory(false); setCategory(CATEGORIES[type as 'expense' | 'income'][0]); }}
+                     className="p-3 bg-gray-100 dark:bg-gray-800 rounded-xl text-muted hover:text-foreground"
+                   >
+                      <ArrowLeft size={18} />
+                   </button>
+                   <input 
+                      type="text"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      placeholder="Enter category name..."
+                      className="flex-1 px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900/50 border-none text-foreground font-medium outline-none focus:ring-2 focus:ring-primary-500/20"
+                      autoFocus
+                   />
+                </div>
+              )}
+           </div>
 
            {/* Details */}
            <div className="grid grid-cols-2 gap-4">
@@ -214,7 +194,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onClose, type:
 
            <button 
              type="submit" 
-             disabled={!amount || !accountId || (type !== 'savings' && !category)}
+             disabled={!amount || !accountId || !category}
              className="w-full py-4 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-lg shadow-lg shadow-primary-500/20 transition-all active:scale-95 mt-4"
            >
               Save Transaction

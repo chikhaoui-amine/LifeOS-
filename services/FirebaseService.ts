@@ -102,12 +102,10 @@ export const FirebaseService = {
 
   init: (onUserChange: (user: User | null) => void) => {
     if (!auth) {
-      // Re-try initialization once if called and auth is missing
       initializeFirebase();
       if (!auth) return () => {};
     }
     
-    // Process redirect results immediately on load
     getRedirectResult(auth)
       .then((result) => {
         if (result?.user) {
@@ -130,30 +128,31 @@ export const FirebaseService = {
       if (!auth) throw new Error("Firebase not configured properly.");
     }
     
-    // Check if we are in a native app context or a restricted browser
     const isNative = typeof window !== 'undefined' && 
       (window.location.protocol === 'file:' || (window as any).Capacitor);
     
     try {
       if (isNative) {
-        // Native apps usually block popups
         await signInWithRedirect(auth, provider);
         return; 
       } else {
-        // Web browsers prefer popups for better SPA experience
         try {
           const result = await signInWithPopup(auth, provider);
           return result.user;
         } catch (popupError: any) {
-          // Fallback to redirect if popup is blocked or fails
           if (popupError.code === 'auth/popup-blocked' || popupError.code === 'auth/cancelled-popup-request') {
             await signInWithRedirect(auth, provider);
+          } else if (popupError.code === 'auth/unauthorized-domain') {
+            const hostname = window.location.hostname;
+            const error = new Error(`Domain "${hostname}" is not authorized. Add it to your Firebase Console settings or use a custom Firebase config.`) as any;
+            error.code = 'auth/unauthorized-domain';
+            throw error;
           } else {
             throw popupError;
           }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Firebase Sign In Error:", error);
       throw error;
     }

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { PiggyBank, Trash2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext';
@@ -38,7 +37,7 @@ export const FinanceOverview: React.FC<{ onAddTransaction: () => void }> = ({ on
        <div>
           <h3 className="text-sm font-black text-foreground mb-4 px-2 uppercase tracking-widest opacity-60">{t.finance.recent}</h3>
           <div className="space-y-3">
-             {transactions.slice(0, 5).map(tx => {
+             {transactions.slice(0, 8).map(tx => {
                 const isExpense = tx.type === 'expense';
                 const isSavings = tx.type === 'savings';
                 return (

@@ -1,10 +1,10 @@
-
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { Habit } from '../types';
 import { getTodayKey, calculateStreak } from '../utils/dateUtils';
 import { storage } from '../utils/storage';
 import { NotificationService } from '../services/NotificationService';
 import { useSettings } from './SettingsContext';
+import { STORAGE_KEYS, SYNC_RELOAD_EVENT } from '../services/BackupService';
 
 interface HabitContextType {
   habits: Habit[];
@@ -23,185 +23,115 @@ interface HabitContextType {
 
 const HabitContext = createContext<HabitContextType | undefined>(undefined);
 
-const HABITS_STORAGE_KEY = 'lifeos_habits_v2';
-const CATEGORIES_STORAGE_KEY = 'lifeos_habit_categories_v1';
-
 const DEFAULT_CATEGORIES = ['Health', 'Morning', 'Evening', 'Productivity', 'Mindfulness', 'Fitness', 'Learning', 'Finance', 'Home'];
 
 export const HabitProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [loading, setLoading] = useState(true);
-  
   const { settings } = useSettings();
 
-  useEffect(() => {
-    const loadData = async () => {
-      const habitsData = await storage.load<Habit[]>(HABITS_STORAGE_KEY);
-      if (habitsData) setHabits(habitsData);
-
-      const categoriesData = await storage.load<string[]>(CATEGORIES_STORAGE_KEY);
-      if (categoriesData !== null) {
-        if (Array.isArray(categoriesData)) {
-            setCategories(categoriesData.length > 0 ? categoriesData : DEFAULT_CATEGORIES);
-        }
-      } else {
-        setCategories(DEFAULT_CATEGORIES);
-      }
-
-      setLoading(false);
-    };
-    loadData();
+  const loadData = useCallback(async () => {
+    const habitsData = await storage.load<Habit[]>(STORAGE_KEYS.HABITS);
+    if (habitsData) setHabits(habitsData);
+    const catsData = await storage.load<string[]>(STORAGE_KEYS.HABIT_CATEGORIES);
+    if (catsData && Array.isArray(catsData)) setCategories(catsData);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    if (!loading) {
-      storage.save(HABITS_STORAGE_KEY, habits);
-    }
-  }, [habits, loading]);
+    loadData();
+    window.addEventListener(SYNC_RELOAD_EVENT, loadData);
+    return () => window.removeEventListener(SYNC_RELOAD_EVENT, loadData);
+  }, [loadData]);
 
-  useEffect(() => {
-    if (!loading) {
-      storage.save(CATEGORIES_STORAGE_KEY, categories);
-    }
-  }, [categories, loading]);
+  const persist = async (updatedHabits: Habit[]) => {
+    setHabits(updatedHabits);
+    await storage.save(STORAGE_KEYS.HABITS, updatedHabits);
+  };
 
   const addHabit = async (data: Omit<Habit, 'id' | 'createdAt' | 'completedDates' | 'archived' | 'progress'>) => {
     const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
-    const newHabit: Habit = {
-      ...data,
-      id,
-      completedDates: [],
-      progress: {},
-      archived: false,
-      createdAt: new Date().toISOString(),
-    };
-    setHabits(prev => [...prev, newHabit]);
+    const newHabit: Habit = { ...data, id, completedDates: [], progress: {}, archived: false, createdAt: new Date().toISOString() };
+    await persist([...habits, newHabit]);
     return id;
   };
 
   const updateHabit = async (id: string, updates: Partial<Habit>) => {
-    setHabits(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h));
+    const updated = habits.map(h => h.id === id ? { ...h, ...updates } : h);
+    await persist(updated);
   };
 
   const deleteHabit = async (id: string) => {
-    setHabits(prev => prev.filter(h => h.id !== id));
+    const updated = habits.filter(h => h.id !== id);
+    await persist(updated);
   };
 
   const archiveHabit = async (id: string) => {
-    setHabits(prev => prev.map(h => h.id === id ? { ...h, archived: true } : h));
+    const updated = habits.map(h => h.id === id ? { ...h, archived: true } : h);
+    await persist(updated);
   };
 
   const toggleHabit = async (id: string, date: string = getTodayKey()) => {
-    setHabits(prev => prev.map(habit => {
+    const updated = habits.map(habit => {
       if (habit.id === id) {
         const isCompleted = habit.completedDates.includes(date);
-        
-        let newDates;
-        let newProgress = { ...habit.progress };
-        
-        if (isCompleted) {
-          newDates = habit.completedDates.filter(d => d !== date);
-          newProgress[date] = 0;
-        } else {
-          newDates = [...habit.completedDates, date];
-          newProgress[date] = habit.goal || 1;
-          
-          if (settings.notifications.enabled) {
-            const newStreak = calculateStreak(newDates);
-            const milestones = [3, 7, 30, 100, 365];
-            if (milestones.includes(newStreak)) {
-              NotificationService.sendAchievement(
-                `${newStreak}-Day Streak!`,
-                `Incredible! You've maintained your ${habit.name} streak for ${newStreak} days. Keep it up!`
-              );
-            }
-          }
+        let newDates = isCompleted ? habit.completedDates.filter(d => d !== date) : [...habit.completedDates, date];
+        let newProgress = { ...habit.progress, [date]: isCompleted ? 0 : (habit.goal || 1) };
+        if (!isCompleted && settings.notifications.enabled) {
+            const streak = calculateStreak(newDates);
+            if ([3, 7, 30].includes(streak)) NotificationService.sendAchievement(`${streak}-Day Streak!`, `Consistency king!`);
         }
-
-        return {
-          ...habit,
-          completedDates: newDates,
-          progress: newProgress,
-          archived: habit.frequency.type === 'once' && !isCompleted ? true : habit.archived
-        };
+        return { ...habit, completedDates: newDates, progress: newProgress, archived: habit.frequency.type === 'once' && !isCompleted ? true : habit.archived };
       }
       return habit;
-    }));
+    });
+    await persist(updated);
   };
 
   const incrementHabit = async (id: string, amount: number, date: string = getTodayKey()) => {
-    setHabits(prev => prev.map(habit => {
+    const updated = habits.map(habit => {
       if (habit.id === id) {
         const currentVal = habit.progress?.[date] || 0;
         const newVal = Math.max(0, currentVal + amount);
-        const newProgress = { ...habit.progress, [date]: newVal };
-        
-        let newDates = [...habit.completedDates];
         const metGoal = newVal >= habit.goal;
-        const alreadyMarked = newDates.includes(date);
-
-        if (metGoal && !alreadyMarked) {
-          newDates.push(date);
-        } else if (!metGoal && alreadyMarked) {
-          newDates = newDates.filter(d => d !== date);
-        }
-
-        return {
-          ...habit,
-          progress: newProgress,
-          completedDates: newDates,
-          archived: habit.frequency.type === 'once' && metGoal ? true : habit.archived
-        };
+        const alreadyMarked = habit.completedDates.includes(date);
+        let newDates = [...habit.completedDates];
+        if (metGoal && !alreadyMarked) newDates.push(date);
+        else if (!metGoal && alreadyMarked) newDates = newDates.filter(d => d !== date);
+        return { ...habit, progress: { ...habit.progress, [date]: newVal }, completedDates: newDates, archived: habit.frequency.type === 'once' && metGoal ? true : habit.archived };
       }
       return habit;
-    }));
+    });
+    await persist(updated);
   };
 
-  const addCategory = (category: string) => {
+  const addCategory = async (category: string) => {
     const trimmed = category.trim();
-    if (trimmed) {
-      setCategories(prev => {
-        if (!prev.includes(trimmed)) {
-           return [...prev, trimmed];
-        }
-        return prev;
-      });
+    if (trimmed && !categories.includes(trimmed)) {
+      const updated = [...categories, trimmed];
+      setCategories(updated);
+      await storage.save(STORAGE_KEYS.HABIT_CATEGORIES, updated);
     }
   };
 
-  const deleteCategory = (category: string) => {
-    setCategories(prev => prev.filter(c => c !== category));
+  const deleteCategory = async (category: string) => {
+    const updated = categories.filter(c => c !== category);
+    setCategories(updated);
+    await storage.save(STORAGE_KEYS.HABIT_CATEGORIES, updated);
   };
 
   const getHabitStats = () => {
     const todayKey = getTodayKey();
     const todayIndex = new Date().getDay();
-    const activeHabits = habits.filter(h => !h.archived && h.frequency.days.includes(todayIndex));
-    if (activeHabits.length === 0) return { total: 0, completedToday: 0, completionRate: 0 };
-    const completedToday = activeHabits.filter(h => h.completedDates.includes(todayKey)).length;
-    return {
-      total: activeHabits.length,
-      completedToday,
-      completionRate: Math.round((completedToday / activeHabits.length) * 100)
-    };
+    const active = habits.filter(h => !h.archived && h.frequency.days.includes(todayIndex));
+    if (active.length === 0) return { total: 0, completedToday: 0, completionRate: 0 };
+    const completed = active.filter(h => h.completedDates.includes(todayKey)).length;
+    return { total: active.length, completedToday: completed, completionRate: Math.round((completed / active.length) * 100) };
   };
 
   return (
-    <HabitContext.Provider value={{ 
-      habits, 
-      loading, 
-      categories,
-      addHabit, 
-      updateHabit, 
-      deleteHabit, 
-      toggleHabit, 
-      incrementHabit,
-      archiveHabit, 
-      addCategory, 
-      deleteCategory,
-      getHabitStats 
-    }}>
+    <HabitContext.Provider value={{ habits, loading, categories, addHabit, updateHabit, deleteHabit, toggleHabit, incrementHabit, archiveHabit, addCategory, deleteCategory, getHabitStats }}>
       {children}
     </HabitContext.Provider>
   );

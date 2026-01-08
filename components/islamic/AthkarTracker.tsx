@@ -1,83 +1,82 @@
-
 import React, { useMemo } from 'react';
-import { Sun, Moon, Star, Check, AlertCircle, Sparkles } from 'lucide-react';
+import { Sun, Moon, Star, Check, X, Sparkles } from 'lucide-react';
 import { useIslamic } from '../../context/IslamicContext';
 import { useSettings } from '../../context/SettingsContext';
 import { getTranslation } from '../../utils/translations';
-import { getHijriKey } from '../../utils/islamicUtils';
-import { LanguageCode } from '../../types';
+import { DeenStatus, LanguageCode } from '../../types';
 
 interface AthkarTrackerProps {
   dateKey?: string;
 }
 
 export const AthkarTracker: React.FC<AthkarTrackerProps> = ({ dateKey }) => {
-  const { getAdhkarForDate, updateAdhkarProgress, settings: islamicSettings } = useIslamic();
+  const { getAdhkarForDate, updateAdhkarStatus } = useIslamic();
   const { settings } = useSettings();
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
 
   const targetKey = dateKey || "";
-  const dailyAdhkar = targetKey ? getAdhkarForDate(targetKey) : getAdhkarForDate("");
+  const dailyAdhkar = getAdhkarForDate(targetKey);
   
-  const todayKey = useMemo(() => getHijriKey(new Date(), islamicSettings.hijriAdjustment), [islamicSettings.hijriAdjustment]);
-  const isPast = targetKey < todayKey && targetKey !== "";
-
-  const toggleMorning = () => updateAdhkarProgress({ morningCompleted: !dailyAdhkar.morningCompleted }, targetKey);
-  const toggleEvening = () => updateAdhkarProgress({ eveningCompleted: !dailyAdhkar.eveningCompleted }, targetKey);
-  const toggleNight = () => updateAdhkarProgress({ nightCompleted: !dailyAdhkar.nightCompleted }, targetKey);
-
-  const renderCard = (label: string, isCompleted: boolean, toggle: () => void, Icon: any, themeColor: string, bgColor: string) => {
-    const isMissed = isPast && !isCompleted;
-    
+  const StatusSelector = ({ current, onSelect }: { current: DeenStatus, onSelect: (s: DeenStatus) => void }) => {
     return (
-      <button
-        onClick={toggle}
-        className={`
-           relative w-full p-4 rounded-3xl border-2 text-left transition-all duration-300 group overflow-hidden
-           ${isCompleted 
-              ? 'bg-surface border-transparent shadow-inner' 
-              : isMissed 
-                 ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30' 
-                 : 'bg-surface border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 shadow-sm'
-           }
-        `}
-      >
-         {isCompleted && (
-            <div className={`absolute inset-0 opacity-10 ${bgColor}`} />
-         )}
-         
-         <div className="flex justify-between items-start relative z-10">
-            <div className="flex items-center gap-3">
-               <div className={`p-2.5 rounded-2xl transition-colors ${isCompleted ? `${bgColor} text-white` : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
-                  <Icon size={18} fill={isCompleted ? "currentColor" : "none"} />
+      <div className="flex bg-foreground/[0.03] dark:bg-foreground/[0.05] p-0.5 rounded-xl gap-0.5 border border-foreground/[0.02] shrink-0">
+        <button 
+          onClick={() => onSelect(current === 'on-time' ? 'none' : 'on-time')}
+          className={`p-2 rounded-lg transition-all active:scale-90 ${current === 'on-time' ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-400 hover:text-emerald-500'}`}
+        >
+          <Check size={14} strokeWidth={4} />
+        </button>
+        <button 
+          onClick={() => onSelect(current === 'missed' ? 'none' : 'missed')}
+          className={`p-2 rounded-lg transition-all active:scale-90 ${current === 'missed' ? 'bg-rose-500 text-white shadow-sm' : 'text-gray-400 hover:text-rose-500'}`}
+        >
+          <X size={14} strokeWidth={4} />
+        </button>
+      </div>
+    );
+  };
+
+  const renderCard = (label: string, status: DeenStatus, onSelect: (s: DeenStatus) => void, Icon: any) => {
+    const isDone = status === 'on-time';
+    const isMissed = status === 'missed';
+
+    return (
+      <div className={`
+           relative w-full p-3 sm:p-4 rounded-[1.5rem] sm:rounded-3xl border transition-all duration-500 group
+           ${isDone ? 'bg-emerald-50/20 dark:bg-emerald-900/5 border-emerald-500/10 shadow-sm' : 
+             isMissed ? 'bg-rose-50/20 dark:bg-rose-900/5 border-rose-500/10 shadow-sm' :
+             'bg-surface border-foreground/[0.05] hover:border-foreground/10'}
+      `}>
+         <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+               <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all duration-500 shrink-0 ${isDone ? 'bg-emerald-500 text-white' : isMissed ? 'bg-rose-500 text-white' : `bg-foreground/[0.05] text-muted`}`}>
+                  <Icon size={18} sm-size={22} fill={status !== 'none' ? "currentColor" : "none"} strokeWidth={2.5} />
                </div>
-               <div>
-                  <h4 className={`font-bold text-sm ${isCompleted ? 'text-foreground' : 'text-gray-500'}`}>{label}</h4>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted opacity-70">
-                     {isCompleted ? 'Completed' : isMissed ? 'Missed' : 'Pending'}
+               <div className="min-w-0">
+                  <h4 className="font-black text-[11px] sm:text-sm text-foreground uppercase tracking-tight truncate leading-tight">{label}</h4>
+                  <p className={`text-[8px] font-black uppercase tracking-widest mt-0.5 ${isDone ? 'text-emerald-500' : isMissed ? 'text-rose-500' : 'text-muted opacity-40'}`}>
+                     {status === 'none' ? 'Ready' : isDone ? 'Done' : 'Missed'}
                   </p>
                </div>
             </div>
             
-            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isCompleted ? `bg-${themeColor}-500 border-${themeColor}-500 text-white` : 'border-gray-300 dark:border-gray-600'}`}>
-               {isCompleted && <Check size={12} strokeWidth={4} />}
-            </div>
+            <StatusSelector current={status} onSelect={onSelect} />
          </div>
-      </button>
+      </div>
     );
   };
 
   return (
-    <div className="space-y-3">
-       <div className="flex items-center gap-2 px-1 mb-2">
-          <Sparkles size={14} className="text-amber-500" />
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-muted">{t.deen.adhkar}</h3>
+    <div className="space-y-3 sm:space-y-4">
+       <div className="flex items-center gap-2 px-1 mb-1">
+          <div className="p-1 bg-amber-500/10 rounded-lg"><Sparkles size={12} className="text-amber-500 animate-pulse" /></div>
+          <h3 className="text-[9px] font-black uppercase tracking-[0.25em] text-muted">{t.deen.adhkar}</h3>
        </div>
        
-       <div className="grid grid-cols-1 gap-3">
-          {renderCard(t.deen.morningAdhkar, dailyAdhkar.morningCompleted, toggleMorning, Sun, 'orange', 'bg-orange-500')}
-          {renderCard(t.deen.eveningAdhkar, dailyAdhkar.eveningCompleted, toggleEvening, Moon, 'indigo', 'bg-indigo-500')}
-          {renderCard(t.deen.beforeSleep, dailyAdhkar.nightCompleted, toggleNight, Star, 'purple', 'bg-purple-500')}
+       <div className="grid grid-cols-1 gap-2.5">
+          {renderCard(t.deen.morningAdhkar, dailyAdhkar.morningStatus, (s) => updateAdhkarStatus('morning', s, targetKey), Sun)}
+          {renderCard(t.deen.eveningAdhkar, dailyAdhkar.eveningStatus, (s) => updateAdhkarStatus('evening', s, targetKey), Moon)}
+          {renderCard(t.deen.beforeSleep, dailyAdhkar.nightStatus, (s) => updateAdhkarStatus('night', s, targetKey), Star)}
        </div>
     </div>
   );

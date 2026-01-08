@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Plus, CheckCircle2, Circle, Calendar as CalendarIcon, Clock, Tag, Flag, Trash2, Edit2, ListTodo, BarChart, Sparkles } from 'lucide-react';
 import { useTasks } from '../context/TaskContext';
@@ -7,7 +6,6 @@ import { useSystemDate } from '../context/SystemDateContext';
 import { getTodayKey, getWeekKey, getMonthKey } from '../utils/dateUtils';
 import { TaskCard } from '../components/TaskCard';
 import { TaskForm } from '../components/TaskForm';
-import { TaskDetail } from '../components/TaskDetail';
 import { ProgressRing } from '../components/ProgressRing';
 import { EmptyState } from '../components/EmptyState';
 import { ConfirmationModal } from '../components/ConfirmationModal';
@@ -23,7 +21,6 @@ const Tasks: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'day' | 'week' | 'month'>('day');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<any>(null);
-  const [selectedTask, setSelectedTask] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [initialFormDate, setInitialFormDate] = useState<any>({});
 
@@ -76,7 +73,6 @@ const Tasks: React.FC = () => {
     if (deleteId) {
       deleteTask(deleteId);
       setDeleteId(null);
-      if (selectedTask?.id === deleteId) setSelectedTask(null);
     }
   };
 
@@ -107,7 +103,6 @@ const Tasks: React.FC = () => {
                         onToggle={() => toggleTask(task.id)} 
                         onEdit={() => {setEditingTask(task); setIsFormOpen(true);}} 
                         onDelete={() => handleDeleteWithConfirm(task.id)} 
-                        onClick={() => setSelectedTask(task)} 
                         onToggleSubtask={(sid) => toggleSubtask(task.id, sid)}
                      />
                   ))}
@@ -133,7 +128,6 @@ const Tasks: React.FC = () => {
                             onToggle={() => toggleTask(task.id)} 
                             onEdit={() => {setEditingTask(task); setIsFormOpen(true);}} 
                             onDelete={() => handleDeleteWithConfirm(task.id)} 
-                            onClick={() => setSelectedTask(task)} 
                             onToggleSubtask={(sid) => toggleSubtask(task.id, sid)}
                         />
                      ))}
@@ -156,7 +150,6 @@ const Tasks: React.FC = () => {
                 onToggle={() => toggleTask(task.id)} 
                 onEdit={() => {setEditingTask(task); setIsFormOpen(true);}} 
                 onDelete={() => handleDeleteWithConfirm(task.id)} 
-                onClick={() => setSelectedTask(task)} 
                 onToggleSubtask={(sid) => toggleSubtask(task.id, sid)}
                />
             )) : (
@@ -184,7 +177,6 @@ const Tasks: React.FC = () => {
                 onToggle={() => toggleTask(task.id)} 
                 onEdit={() => {setEditingTask(task); setIsFormOpen(true);}} 
                 onDelete={() => handleDeleteWithConfirm(task.id)} 
-                onClick={() => setSelectedTask(task)} 
                 onToggleSubtask={(sid) => toggleSubtask(task.id, sid)}
                />
             )) : (
@@ -208,7 +200,7 @@ const Tasks: React.FC = () => {
         <header className="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-2 py-1">
             <div className="flex items-center gap-3 sm:gap-4">
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary-600 rounded-xl flex items-center justify-center text-white shadow-xl shadow-primary-600/20 rotate-3">
-                    <ListTodo size={20} sm-size={24} strokeWidth={2.5} />
+                    <ListTodo size={20} strokeWidth={2.5} />
                 </div>
                 <div>
                     <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tighter uppercase">{t.tasks.title}</h1>
@@ -246,17 +238,6 @@ const Tasks: React.FC = () => {
                 initialData={{...editingTask, ...initialFormDate}} 
                 onSave={handleSave} 
                 onClose={() => setIsFormOpen(false)} 
-            />
-        )}
-
-        {selectedTask && (
-            <TaskDetail 
-                task={selectedTask}
-                onClose={() => setSelectedTask(null)}
-                onToggle={() => toggleTask(selectedTask.id)}
-                onEdit={() => { setEditingTask(selectedTask); setSelectedTask(null); setIsFormOpen(true); }}
-                onDelete={() => handleDeleteWithConfirm(selectedTask.id)}
-                onToggleSubtask={(sid) => toggleSubtask(selectedTask.id, sid)}
             />
         )}
 

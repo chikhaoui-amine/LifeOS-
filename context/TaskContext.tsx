@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { Task, Subtask } from '../types';
 import { getTodayKey } from '../utils/dateUtils';
 import { storage } from '../utils/storage';
+import { STORAGE_KEYS, SYNC_RELOAD_EVENT } from '../services/BackupService';
 
 interface TaskContextType {
   tasks: Task[];
@@ -18,30 +19,26 @@ interface TaskContextType {
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
-const TASKS_STORAGE_KEY = 'lifeos_tasks_v2';
-
 export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load Tasks
-  useEffect(() => {
-    const loadData = async () => {
-      const data = await storage.load<Task[]>(TASKS_STORAGE_KEY);
-      if (data) {
-        setTasks(data);
-      }
-      setLoading(false);
-    };
-    loadData();
+  const loadData = useCallback(async () => {
+    const data = await storage.load<Task[]>(STORAGE_KEYS.TASKS);
+    if (data) setTasks(data);
+    setLoading(false);
   }, []);
 
-  // Sync to Storage
   useEffect(() => {
-    if (!loading) {
-      storage.save(TASKS_STORAGE_KEY, tasks);
-    }
-  }, [tasks, loading]);
+    loadData();
+    window.addEventListener(SYNC_RELOAD_EVENT, loadData);
+    return () => window.removeEventListener(SYNC_RELOAD_EVENT, loadData);
+  }, [loadData]);
+
+  const persist = async (updated: Task[]) => {
+    setTasks(updated);
+    await storage.save(STORAGE_KEYS.TASKS, updated);
+  };
 
   const addTask = async (data: Omit<Task, 'id' | 'completed' | 'createdAt' | 'subtasks'>) => {
     const newTask: Task = {
@@ -52,19 +49,21 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       createdAt: new Date().toISOString(),
       tags: data.tags || [],
     };
-    setTasks(prev => [newTask, ...prev]);
+    await persist([newTask, ...tasks]);
   };
 
   const updateTask = async (id: string, updates: Partial<Task>) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    const updated = tasks.map(t => t.id === id ? { ...t, ...updates } : t);
+    await persist(updated);
   };
 
   const deleteTask = async (id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
+    const updated = tasks.filter(t => t.id !== id);
+    await persist(updated);
   };
 
   const toggleTask = async (id: string) => {
-    setTasks(prev => prev.map(t => {
+    const updated = tasks.map(t => {
       if (t.id === id) {
         const newStatus = !t.completed;
         return { 
@@ -74,45 +73,41 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
       return t;
-    }));
+    });
+    await persist(updated);
   };
 
   const addSubtask = async (taskId: string, title: string) => {
-    setTasks(prev => prev.map(t => {
+    const updated = tasks.map(t => {
       if (t.id === taskId) {
-        const newSubtask: Subtask = {
-          id: Date.now().toString(),
-          title,
-          completed: false
-        };
+        const newSubtask: Subtask = { id: Date.now().toString(), title, completed: false };
         return { ...t, subtasks: [...t.subtasks, newSubtask] };
       }
       return t;
-    }));
+    });
+    await persist(updated);
   };
 
   const toggleSubtask = async (taskId: string, subtaskId: string) => {
-    setTasks(prev => prev.map(t => {
+    const updated = tasks.map(t => {
       if (t.id === taskId) {
         return {
           ...t,
-          subtasks: t.subtasks.map(st => 
-            st.id === subtaskId ? { ...st, completed: !st.completed } : st
-          )
+          subtasks: t.subtasks.map(st => st.id === subtaskId ? { ...st, completed: !st.completed } : st)
         };
       }
       return t;
-    }));
+    });
+    await persist(updated);
   };
 
   const clearCompletedTasks = async () => {
-    setTasks(prev => prev.filter(t => !t.completed));
+    await persist(tasks.filter(t => !t.completed));
   };
 
   const getTaskStats = () => {
     const todayKey = getTodayKey();
     const pending = tasks.filter(t => !t.completed);
-    
     return {
       totalPending: pending.length,
       completedToday: tasks.filter(t => t.completed && t.dueDate === todayKey).length,
@@ -121,18 +116,7 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <TaskContext.Provider value={{ 
-      tasks, 
-      loading, 
-      addTask, 
-      updateTask, 
-      deleteTask, 
-      toggleTask, 
-      addSubtask, 
-      toggleSubtask,
-      getTaskStats,
-      clearCompletedTasks
-    }}>
+    <TaskContext.Provider value={{ tasks, loading, addTask, updateTask, deleteTask, toggleTask, addSubtask, toggleSubtask, getTaskStats, clearCompletedTasks }}>
       {children}
     </TaskContext.Provider>
   );

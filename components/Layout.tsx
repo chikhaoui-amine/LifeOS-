@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useMemo } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { 
@@ -147,17 +146,6 @@ export const Layout: React.FC = () => {
 
           {/* User Status Section - Refined */}
           <div className="flex items-center gap-2 shrink-0">
-             {isGoogleConnected && (
-               <button 
-                 onClick={syncNow} 
-                 className={`p-2.5 rounded-2xl transition-all duration-500 border border-transparent active:scale-90 relative group ${isSyncing ? 'text-primary bg-primary/10 animate-spin' : 'text-foreground/40 hover:bg-foreground/5 hover:text-foreground'}`}
-                 title="Force Sync"
-               >
-                 <RefreshCw size={16} strokeWidth={2.5} />
-                 {!isSyncing && <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-green-500 rounded-full border border-surface" />}
-               </button>
-             )}
-             
              <NavLink 
                to="/settings" 
                className={({ isActive }) => `

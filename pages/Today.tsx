@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   CheckCircle2, ListTodo, Sun, Moon, Sunrise, 
@@ -15,7 +14,6 @@ import { useSystemDate } from '../context/SystemDateContext';
 import { HabitCard } from '../components/HabitCard';
 import { TaskCard } from '../components/TaskCard';
 import { TaskForm } from '../components/TaskForm';
-import { TaskDetail } from '../components/TaskDetail';
 import { Task, LanguageCode } from '../types';
 import { getTranslation } from '../utils/translations';
 
@@ -30,7 +28,6 @@ const Today: React.FC = () => {
   
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
   
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -168,7 +165,7 @@ const Today: React.FC = () => {
                            <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">Urgent</span>
                         </div>
                         {urgentTasks.map(task => (
-                           <TaskCard key={task.id} task={task} onToggle={() => toggleTask(task.id)} onEdit={() => setEditingTask(task)} onDelete={() => deleteTask(task.id)} onClick={() => setSelectedTask(task)} />
+                           <TaskCard key={task.id} task={task} onToggle={() => toggleTask(task.id)} onEdit={() => setEditingTask(task)} onDelete={() => deleteTask(task.id)} />
                         ))}
                      </div>
                   )}
@@ -180,7 +177,7 @@ const Today: React.FC = () => {
                            <span className="text-[8px] font-black text-primary-500 uppercase tracking-widest">Routine</span>
                         </div>
                         {routineTasks.map(task => (
-                           <TaskCard key={task.id} task={task} onToggle={() => toggleTask(task.id)} onEdit={() => setEditingTask(task)} onDelete={() => deleteTask(task.id)} onClick={() => setSelectedTask(task)} />
+                           <TaskCard key={task.id} task={task} onToggle={() => toggleTask(task.id)} onEdit={() => setEditingTask(task)} onDelete={() => deleteTask(task.id)} />
                         ))}
                      </div>
                   )}
@@ -246,9 +243,6 @@ const Today: React.FC = () => {
       </div>
 
       {/* Modals */}
-      {selectedTask && (
-         <TaskDetail task={selectedTask} onClose={() => setSelectedTask(null)} onToggle={() => toggleTask(selectedTask.id)} onEdit={() => { setEditingTask(selectedTask); setSelectedTask(null); }} onDelete={() => deleteTask(selectedTask.id)} onToggleSubtask={(sid) => toggleSubtask(selectedTask.id, sid)} />
-      )}
       {editingTask && (
          <TaskForm initialData={editingTask} onSave={(data) => { updateTask(editingTask.id, data); setEditingTask(null); }} onClose={() => setEditingTask(null)} />
       )}
