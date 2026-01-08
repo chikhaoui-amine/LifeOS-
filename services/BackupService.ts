@@ -42,8 +42,8 @@ export const STORAGE_KEYS = {
 export const BackupService = {
   createBackupData: (habits: Habit[], tasks: Task[], settings: AppSettings): BackupData => {
     return {
-      version: "1.8.0",
-      appVersion: "1.8.0",
+      version: "1.8.1",
+      appVersion: "1.8.1",
       exportDate: new Date().toISOString(),
       habits: habits || [],
       tasks: tasks || [],
@@ -68,7 +68,8 @@ export const BackupService = {
 
   validateBackup: (data: any): boolean => {
     if (!data || typeof data !== 'object') return false;
-    return !!data.settings && (!!data.habits || !!data.tasks);
+    // Must have settings and at least one of the primary data arrays to be considered valid for a full replace
+    return !!data.settings && !!data.exportDate;
   },
 
   readBackupFile: (file: File): Promise<BackupData> => {
@@ -87,6 +88,11 @@ export const BackupService = {
   },
 
   performReplace: async (data: BackupData) => {
+    if (!BackupService.validateBackup(data)) {
+        console.error("Backup Data Validation Failed: Refusing to overwrite local storage with invalid data.");
+        return false;
+    }
+
     try {
         const ops = [];
         if (data.settings) ops.push(storage.save(STORAGE_KEYS.SETTINGS, data.settings));

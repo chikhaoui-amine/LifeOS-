@@ -22,7 +22,7 @@ export const GoogleBackupManager: React.FC = () => {
     setAuthError(null);
     try {
       await FirebaseService.signIn();
-      showToast('Contacting Authentication Servers...', 'info');
+      showToast('Cloud connection requested...', 'info');
     } catch (e: any) {
       console.error("Firebase Auth UI Error:", e);
       if (e.code === 'auth/popup-closed-by-user') {
@@ -43,14 +43,21 @@ export const GoogleBackupManager: React.FC = () => {
   };
 
   const handleDisconnect = async () => {
-    if (window.confirm("Safe Disconnect: All local data will be reset to defaults for privacy. Continue?")) {
+    if (window.confirm("Safe Disconnect: Your local data will be reset to defaults to protect your privacy on this device. Cloud data remains safe. Continue?")) {
       try {
+        setIsLoading(true);
+        // Attempt one final sync before wiping
+        showToast('Performing final cloud mirror...', 'info');
+        await syncNow().catch(e => console.warn("Final sync failed, proceeding to disconnect", e));
+        
         await FirebaseService.signOut();
         await storage.clearAll();
         showToast('Account Disconnected', 'info');
         window.location.reload();
       } catch (e) {
         showToast('Error during logout', 'error');
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -185,6 +192,7 @@ export const GoogleBackupManager: React.FC = () => {
                  </button>
                  <button 
                    onClick={handleDisconnect}
+                   disabled={isLoading}
                    className="flex-1 py-3.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-all active:scale-[0.94] border border-red-100 dark:border-red-900/30 shadow-sm flex items-center justify-center"
                    title="Disconnect Logic"
                  >
