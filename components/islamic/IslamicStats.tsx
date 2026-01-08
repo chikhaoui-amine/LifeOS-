@@ -4,7 +4,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { Star, Moon } from 'lucide-react';
 import { LineChart } from '../Charts';
 import { getHijriKey } from '../../utils/islamicUtils';
-import { LanguageCode } from '../../types';
+import { LanguageCode, DeenStatus } from '../../types';
 
 export const IslamicStats: React.FC = () => {
   const { prayers, adhkar, settings: islamicSettings } = useIslamic();
@@ -33,21 +33,15 @@ export const IslamicStats: React.FC = () => {
 
         // Adhkar Count (0-3)
         const dayAdhkar = adhkar.find(a => a.date === key);
+        const isDone = (s: DeenStatus) => s === 'on-time' || s === 'late';
         const adhkarCount = dayAdhkar ? 
-            (dayAdhkar.morningCompleted ? 1 : 0) + 
-            (dayAdhkar.eveningCompleted ? 1 : 0) + 
-            (dayAdhkar.nightCompleted ? 1 : 0) : 0;
+            (isDone(dayAdhkar.morningStatus) ? 1 : 0) + 
+            (isDone(dayAdhkar.eveningStatus) ? 1 : 0) + 
+            (isDone(dayAdhkar.nightStatus) ? 1 : 0) : 0;
 
         // Sunnah Count
         const dayPrayer = prayers.find(p => p.date === key);
-        const sunnahCount = dayPrayer ?
-            (dayPrayer.sunnahFajr ? 1 : 0) +
-            (dayPrayer.duha ? 1 : 0) +
-            (dayPrayer.sunnahDhuhr ? 1 : 0) +
-            (dayPrayer.sunnahAsr ? 1 : 0) +
-            (dayPrayer.sunnahMaghrib ? 1 : 0) +
-            (dayPrayer.sunnahIsha ? 1 : 0) +
-            (dayPrayer.witr ? 1 : 0) : 0;
+        const sunnahCount = dayPrayer ? dayPrayer.sunnahs.filter(s => isDone(s.status)).length : 0;
 
         data.push({
             day: dayName,

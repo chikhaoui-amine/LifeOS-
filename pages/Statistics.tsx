@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { 
   Activity, Moon, CheckCircle2, ListTodo, Target, Droplets, Smile, DollarSign, 
@@ -18,6 +17,7 @@ import { LineChart, MultiLineChart } from '../components/Charts';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { formatDateKey } from '../utils/dateUtils';
 import { StatsCard } from '../components/StatsCard';
+import { DeenStatus } from '../types';
 
 const Statistics: React.FC = () => {
   // Contexts
@@ -120,9 +120,10 @@ const Statistics: React.FC = () => {
       const key = formatDateKey(date);
       const dayAdhkar = adhkar.find(a => a.date === key);
       if (!dayAdhkar) return 0;
-      return (dayAdhkar.morningCompleted ? 1 : 0) + 
-             (dayAdhkar.eveningCompleted ? 1 : 0) + 
-             (dayAdhkar.nightCompleted ? 1 : 0);
+      const isDone = (s: DeenStatus) => s === 'on-time' || s === 'late';
+      return (isDone(dayAdhkar.morningStatus) ? 1 : 0) + 
+             (isDone(dayAdhkar.eveningStatus) ? 1 : 0) + 
+             (isDone(dayAdhkar.nightStatus) ? 1 : 0);
     });
   }, [adhkar, daysInMonth]);
 
@@ -131,16 +132,8 @@ const Statistics: React.FC = () => {
       const key = formatDateKey(date);
       const dayPrayer = prayers.find(p => p.date === key);
       if (!dayPrayer) return 0;
-      let count = 0;
-      if (dayPrayer.sunnahFajr) count++;
-      if (dayPrayer.sunnahDhuhr) count++;
-      if (dayPrayer.sunnahAsr) count++;
-      if (dayPrayer.sunnahMaghrib) count++;
-      if (dayPrayer.sunnahIsha) count++;
-      if (dayPrayer.witr) count++;
-      if (dayPrayer.duha) count++;
-      if (dayPrayer.tahajjud) count++;
-      return count;
+      const isDone = (s: DeenStatus) => s === 'on-time' || s === 'late';
+      return dayPrayer.sunnahs.filter(s => isDone(s.status)).length;
     });
   }, [prayers, daysInMonth]);
 
