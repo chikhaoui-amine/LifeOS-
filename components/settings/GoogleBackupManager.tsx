@@ -10,7 +10,7 @@ import { storage } from '../../utils/storage';
 
 export const GoogleBackupManager: React.FC = () => {
   const { settings } = useSettings();
-  const { isSyncing, lastSyncedAt, user, syncNow } = useSync();
+  const { isSyncing, lastSyncedAt, user, syncNow, syncStatus } = useSync();
   const { showToast } = useToast();
   const t = useMemo(() => getTranslation((settings?.preferences?.language || 'en') as LanguageCode), [settings?.preferences?.language]);
 
@@ -52,6 +52,9 @@ export const GoogleBackupManager: React.FC = () => {
         
         await FirebaseService.signOut();
         await storage.clearAll();
+        // Clear sync marker
+        localStorage.removeItem('lifeos_last_cloud_sync_ts');
+        
         showToast('Account Disconnected', 'info');
         window.location.reload();
       } catch (e) {
@@ -61,6 +64,14 @@ export const GoogleBackupManager: React.FC = () => {
       }
     }
   };
+
+  const statusLabel = useMemo(() => {
+    if (isSyncing) return 'Mirroring...';
+    if (syncStatus === 'connecting') return 'Connecting...';
+    if (syncStatus === 'handshake') return 'Restoring...';
+    if (syncStatus === 'error') return 'Sync Error';
+    return 'Stable';
+  }, [isSyncing, syncStatus]);
 
   return (
     <div className="space-y-4">
@@ -168,11 +179,13 @@ export const GoogleBackupManager: React.FC = () => {
               <div className="space-y-2">
                  <div className="flex justify-between items-center text-[10px] font-black text-muted uppercase tracking-[0.4em]">
                     <span>Telemetry</span>
-                    <span className={isSyncing ? 'text-blue-500 animate-pulse' : 'text-emerald-500'}>{isSyncing ? 'Mirroring...' : 'Stable'}</span>
+                    <span className={(isSyncing || syncStatus === 'handshake' || syncStatus === 'connecting') ? 'text-blue-500 animate-pulse' : syncStatus === 'error' ? 'text-rose-500' : 'text-emerald-500'}>{statusLabel}</span>
                  </div>
                  <div className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden shadow-inner p-0.5">
-                    {isSyncing ? (
+                    {(isSyncing || syncStatus === 'handshake' || syncStatus === 'connecting') ? (
                        <div className="h-full bg-blue-500 animate-pulse rounded-full w-full" />
+                    ) : syncStatus === 'error' ? (
+                       <div className="h-full bg-rose-500 w-full rounded-full" />
                     ) : (
                        <div className="h-full bg-emerald-500 w-full rounded-full shadow-[0_0_10px_rgba(16,185,129,0.4)]" />
                     )}
@@ -185,7 +198,7 @@ export const GoogleBackupManager: React.FC = () => {
               <div className="flex gap-2">
                  <button 
                    onClick={syncNow}
-                   disabled={isSyncing}
+                   disabled={isSyncing || syncStatus !== 'ready'}
                    className="flex-[2] py-3.5 bg-primary text-white rounded-2xl font-black text-[10px] sm:text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl shadow-primary-500/20 transition-all active:scale-[0.94] disabled:opacity-50 hover:bg-primary-600"
                  >
                     <RefreshCw size={14} strokeWidth={3} className={isSyncing ? "animate-spin" : ""} /> Force Update

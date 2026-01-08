@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { useSettings } from './SettingsContext';
 import { useHabits } from './HabitContext';
 import { useTasks } from './TaskContext';
@@ -17,15 +17,21 @@ import { FirebaseService, User } from '../services/FirebaseService';
 import { BackupService } from '../services/BackupService';
 import { useToast } from './ToastContext';
 import { BackupData } from '../types';
+import { storage } from '../utils/storage';
+
+type SyncStatus = 'idle' | 'connecting' | 'handshake' | 'ready' | 'error';
 
 interface SyncContextType {
   isSyncing: boolean;
   lastSyncedAt: Date | null;
   user: User | null;
+  syncStatus: SyncStatus;
   syncNow: () => Promise<void>; 
 }
 
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
+
+const LAST_CLOUD_TS_KEY = 'lifeos_last_cloud_sync_ts';
 
 export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { settings, setGoogleConnected } = useSettings();
@@ -46,15 +52,20 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { showToast } = useToast();
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [user, setUser] = useState<User | null>(null);
   
   const isIncomingSync = useRef(false);
-  const lastCloudTsRef = useRef<number>(0);
   const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasInitializedSync = useRef(false);
 
   const isLocalReady = !habitsLoading && !tasksLoading && !journalLoading && !goalsLoading && !financeLoading && !mealsLoading && !sleepLoading && !timeLoading && !deenLoading && !visionLoading && !reportsLoading;
+
+  // Determine if this device is truly "empty" (newly reinstalled or cleared)
+  const isLocalEmpty = useMemo(() => {
+    if (!isLocalReady) return false;
+    return habits.length === 0 && tasks.length === 0 && journal.length === 0 && goals.length === 0 && visionBoard.length === 0 && accounts.length <= 1;
+  }, [isLocalReady, habits.length, tasks.length, journal.length, goals.length, visionBoard.length, accounts.length]);
 
   const getCurrentSnapshot = useCallback((): BackupData => {
     const state = BackupService.createBackupData(habits, tasks, settings);
@@ -89,85 +100,105 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const unsubscribe = FirebaseService.init((currentUser) => {
       setUser(currentUser);
       setGoogleConnected(!!currentUser);
+      if (currentUser) {
+        setSyncStatus('connecting');
+      } else {
+        setSyncStatus('idle');
+      }
     });
     return () => unsubscribe();
   }, [setGoogleConnected]);
 
-  // Main Sync Logic
+  // Strategic Handshake Logic
   useEffect(() => {
-    if (!user || !isLocalReady) return;
+    if (!user || !isLocalReady || syncStatus === 'ready') return;
 
     const unsubscribe = FirebaseService.subscribeToUserData(async (cloudData) => {
+      // Prevent recursive sync loops
+      if (isIncomingSync.current) return;
+
       const currentLocal = getCurrentSnapshot();
       const localTs = new Date(currentLocal.exportDate).getTime();
+      const lastKnownCloudTs = Number(localStorage.getItem(LAST_CLOUD_TS_KEY)) || 0;
 
-      // Handle empty cloud (New User or Reconnect)
+      // CASE 1: Cloud is empty (brand new account)
       if (!cloudData || !cloudData.exportDate) {
-        if (!hasInitializedSync.current && (habits.length > 0 || tasks.length > 0 || visionBoard.length > 0)) {
-           console.log("Sync Handshake: Cloud is empty, uploading local master data...");
-           await FirebaseService.saveUserData(currentLocal);
-           setLastSyncedAt(new Date());
-           hasInitializedSync.current = true;
+        console.log("Handshake: Cloud empty. Initializing master upload...");
+        if (!isLocalEmpty) {
+          await FirebaseService.saveUserData(currentLocal);
+          localStorage.setItem(LAST_CLOUD_TS_KEY, localTs.toString());
         }
+        setSyncStatus('ready');
         return;
       }
-      
+
       const cloudTs = new Date(cloudData.exportDate).getTime();
 
-      // Logic: Only replace local if Cloud is strictly NEWER than local
-      if (cloudTs <= localTs) {
-          lastCloudTsRef.current = Math.max(lastCloudTsRef.current, cloudTs);
-          hasInitializedSync.current = true;
-          return;
-      }
+      // CASE 2: Restore required (Local is empty OR Cloud is significantly newer)
+      const shouldRestore = isLocalEmpty || cloudTs > lastKnownCloudTs;
 
-      console.log(`Cloud Sync: Incoming update detected (${cloudData.exportDate})`);
-      isIncomingSync.current = true;
-      setIsSyncing(true);
-      
-      try {
-        await BackupService.performReplace(cloudData);
-        lastCloudTsRef.current = cloudTs;
-        setLastSyncedAt(new Date());
-        showToast('Cloud Data Synchronized', 'info');
-      } catch (e) {
-        console.error("Mirror Sync Failure:", e);
-      } finally {
-        setIsSyncing(false);
-        hasInitializedSync.current = true;
-        setTimeout(() => { isIncomingSync.current = false; }, 3000);
+      if (shouldRestore) {
+        console.log(`Handshake: Restoring from Cloud (Ver: ${cloudData.exportDate})`);
+        isIncomingSync.current = true;
+        setIsSyncing(true);
+        setSyncStatus('handshake');
+        
+        try {
+          const success = await BackupService.performReplace(cloudData);
+          if (success) {
+            localStorage.setItem(LAST_CLOUD_TS_KEY, cloudTs.toString());
+            setLastSyncedAt(new Date());
+            showToast('Cloud Data Restored', 'success');
+          }
+        } catch (e) {
+          console.error("Restoration Failed:", e);
+          setSyncStatus('error');
+        } finally {
+          setIsSyncing(false);
+          setSyncStatus('ready');
+          setTimeout(() => { isIncomingSync.current = false; }, 3000);
+        }
+      } else {
+        // CASE 3: Local data is already synced or newer
+        console.log("Handshake: System aligned.");
+        setSyncStatus('ready');
       }
     });
 
     return () => unsubscribe();
-  }, [user, isLocalReady, getCurrentSnapshot, showToast, habits.length, tasks.length, visionBoard.length]);
+  }, [user, isLocalReady, isLocalEmpty, syncStatus, getCurrentSnapshot, showToast]);
 
-  // Auto-Upload Effect (Local Changes -> Cloud)
+  // Auto-Mirror logic (Local -> Cloud)
   useEffect(() => {
-    if (!user || !isLocalReady || isSyncing || isIncomingSync.current || !hasInitializedSync.current) return;
+    // CRITICAL: Never upload if we aren't in 'ready' status (prevents overwriting cloud with empty local state)
+    if (!user || !isLocalReady || isSyncing || isIncomingSync.current || syncStatus !== 'ready') return;
     
     if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
 
     syncDebounceRef.current = setTimeout(async () => {
       const data = getCurrentSnapshot();
       const currentTs = new Date(data.exportDate).getTime();
+      const lastKnownCloudTs = Number(localStorage.getItem(LAST_CLOUD_TS_KEY)) || 0;
       
-      // Don't upload if nothing has changed since the last known cloud state
-      if (currentTs <= lastCloudTsRef.current) return;
+      // Only upload if something actually changed since our last sync
+      if (currentTs <= lastKnownCloudTs) return;
 
       try {
+        setIsSyncing(true);
         await FirebaseService.saveUserData(data);
-        lastCloudTsRef.current = currentTs;
+        localStorage.setItem(LAST_CLOUD_TS_KEY, currentTs.toString());
         setLastSyncedAt(new Date());
       } catch (e) {
-        console.error("Auto-Mirror Failure:", e);
+        console.error("Background Upload Failed:", e);
+      } finally {
+        setIsSyncing(false);
       }
-    }, 8000); 
+    }, 15000); 
 
     return () => {
       if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
     };
-  }, [user, isLocalReady, isSyncing, getCurrentSnapshot]);
+  }, [user, isLocalReady, isSyncing, syncStatus, getCurrentSnapshot]);
 
   const syncNow = async () => {
     if (!user) {
@@ -178,9 +209,9 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
         const data = getCurrentSnapshot();
         await FirebaseService.saveUserData(data);
-        lastCloudTsRef.current = new Date(data.exportDate).getTime();
+        localStorage.setItem(LAST_CLOUD_TS_KEY, new Date(data.exportDate).getTime().toString());
         setLastSyncedAt(new Date());
-        showToast('Manual Sync Success', 'success');
+        showToast('System Mirrored', 'success');
     } catch(e) {
         showToast('Sync Failure', 'error');
     } finally {
@@ -189,7 +220,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <SyncContext.Provider value={{ isSyncing, lastSyncedAt, user, syncNow }}>
+    <SyncContext.Provider value={{ isSyncing, lastSyncedAt, user, syncStatus, syncNow }}>
       {children}
     </SyncContext.Provider>
   );

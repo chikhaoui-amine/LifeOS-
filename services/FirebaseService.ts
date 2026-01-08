@@ -73,10 +73,8 @@ const initializeFirebase = () => {
       provider.addScope('email');
       provider.setCustomParameters({ prompt: 'select_account' });
 
-      // Enforce Local Session Persistence
       setPersistence(auth, browserLocalPersistence).catch(e => console.warn("Persistence set error", e));
 
-      // Enable Offline Database Persistence
       if (typeof window !== 'undefined') {
         enableIndexedDbPersistence(db).catch((err) => {
           if (err.code === 'failed-precondition') {
@@ -107,7 +105,6 @@ export const FirebaseService = {
       if (!auth) return () => {};
     }
     
-    // Crucial for Android APK / Redirect flows
     getRedirectResult(auth)
       .then((result) => {
         if (result?.user) console.log("LifeOS Auth: Verified redirect session.");
@@ -128,7 +125,6 @@ export const FirebaseService = {
       if (!auth) throw new Error("Cloud subsystem not configured.");
     }
     
-    // Check if we are in a limited browser environment (native app, file protocol, etc)
     const isRestrictedEnv = typeof window !== 'undefined' && 
       (window.location.protocol === 'file:' || (window as any).Capacitor || navigator.userAgent.includes('wv'));
     
@@ -141,7 +137,6 @@ export const FirebaseService = {
           const result = await signInWithPopup(auth, provider);
           return result.user;
         } catch (popupError: any) {
-          // Fallback to redirect if popup fails/is blocked
           if (['auth/popup-blocked', 'auth/cancelled-popup-request', 'auth/popup-closed-by-user'].includes(popupError.code)) {
             await signInWithRedirect(auth, provider);
           } else {
@@ -180,7 +175,8 @@ export const FirebaseService = {
       const userRef = doc(db, "users", auth.currentUser.uid);
       await setDoc(userRef, { 
         backupData: data, 
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: data.exportDate, // Use the actual export timestamp
+        serverTimestamp: new Date().toISOString(),
         metadata: {
           platform: navigator.platform,
           version: data.appVersion
@@ -198,7 +194,6 @@ export const FirebaseService = {
     const userRef = doc(db, "users", auth.currentUser.uid);
     
     return onSnapshot(userRef, (docSnap) => {
-      // Ignore local writes - only listen to remote changes
       if (docSnap.metadata.hasPendingWrites) return;
 
       if (docSnap.exists()) {
