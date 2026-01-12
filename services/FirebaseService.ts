@@ -173,22 +173,26 @@ export const FirebaseService = {
 
     try {
       const userRef = doc(db, "users", auth.currentUser.uid);
+      // Ensure we don't save with a null timestamp
+      const timestamp = data.exportDate || new Date().toISOString();
+      
       await setDoc(userRef, { 
-        backupData: data, 
-        lastUpdated: data.exportDate, // Use the actual export timestamp
+        ...data,
+        exportDate: timestamp,
+        lastUpdated: timestamp,
         serverTimestamp: new Date().toISOString(),
         metadata: {
           platform: navigator.platform,
           version: data.appVersion
         }
-      }, { merge: true });
+      }, { merge: false }); // Fully overwrite the doc to ensure structured consistency
     } catch (error) {
       console.error("Firestore Upload Failed:", error);
       throw error;
     }
   },
 
-  subscribeToUserData: (onDataReceived: (data: BackupData) => void) => {
+  subscribeToUserData: (onDataReceived: (data: BackupData | null) => void) => {
     if (!auth?.currentUser || !db) return () => {};
 
     const userRef = doc(db, "users", auth.currentUser.uid);
@@ -198,9 +202,13 @@ export const FirebaseService = {
 
       if (docSnap.exists()) {
         const content = docSnap.data();
-        if (content?.backupData) {
-          onDataReceived(content.backupData as BackupData);
+        if (content) {
+          onDataReceived(content as unknown as BackupData);
+        } else {
+          onDataReceived(null);
         }
+      } else {
+        onDataReceived(null);
       }
     }, (error) => {
       console.warn("Firestore Snapshot Subscription error:", error);

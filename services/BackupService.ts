@@ -40,15 +40,25 @@ export const STORAGE_KEYS = {
 };
 
 export const BackupService = {
-  createBackupData: (habits: Habit[], tasks: Task[], settings: AppSettings): BackupData => {
+  createBackupData: (habits: Habit[], tasks: Task[], settings: AppSettings, timestamp?: string): BackupData => {
     return {
       version: "1.8.1",
       appVersion: "1.8.1",
-      exportDate: new Date().toISOString(),
+      exportDate: timestamp || new Date().toISOString(),
       habits: habits || [],
       tasks: tasks || [],
       settings: settings
     };
+  },
+
+  isDataEmpty: (data: BackupData): boolean => {
+    return (
+      (!data.habits || data.habits.length === 0) &&
+      (!data.tasks || data.tasks.length === 0) &&
+      (!(data as any).journal || (data as any).journal.length === 0) &&
+      (!(data as any).goals || (data as any).goals.length === 0) &&
+      (!(data as any).visionBoard || (data as any).visionBoard.length === 0)
+    );
   },
 
   downloadBackup: async (data: BackupData) => {
