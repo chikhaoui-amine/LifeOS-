@@ -93,10 +93,10 @@ const Calendar: React.FC = () => {
            ${!isCurrentMonth ? 'bg-gray-50/30 dark:bg-gray-900/30 text-opacity-40' : 'bg-surface'}
         `}
       >
-         {/* Past Day "X" Overlay */}
+         {/* Memento Mori "X" Overlay for Past Days */}
          {isDayPast && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.07] dark:opacity-[0.12]">
-               <XIcon size={isCurrentMonth ? 80 : 60} strokeWidth={1} className="text-gray-900 dark:text-white" />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.05] dark:opacity-[0.1]">
+               <XIcon size={isCurrentMonth ? 80 : 60} strokeWidth={1} className="text-foreground" />
             </div>
          )}
 
@@ -114,9 +114,9 @@ const Calendar: React.FC = () => {
             {/* Task Bars */}
             {dayTasks.length > 0 && (
                <div className="flex flex-col gap-0.5">
-                  <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-1.5 w-full bg-foreground/5 rounded-full overflow-hidden">
                      <div 
-                        className="h-full bg-blue-500 rounded-full" 
+                        className="h-full bg-primary-500 rounded-full" 
                         style={{ width: `${(completedTasks.length / dayTasks.length) * 100}%` }} 
                      />
                   </div>
@@ -160,7 +160,7 @@ const Calendar: React.FC = () => {
               <div className="flex items-center gap-3 mt-0.5">
                  <div className="flex items-center gap-1.5 bg-primary-50 dark:bg-primary-900/20 px-2 py-0.5 rounded-lg">
                     <span className="text-[9px] sm:text-[10px] font-black text-primary-600 uppercase tracking-widest">
-                       {viewMode === 'month' ? 'Monthly Overview' : viewMode === 'week' ? 'Weekly Blocking' : 'Daily Schedule'}
+                       {viewMode === 'month' ? 'Temporal Auditor' : viewMode === 'week' ? 'Weekly Blocking' : 'Daily Schedule'}
                     </span>
                  </div>
               </div>
@@ -219,7 +219,6 @@ const Calendar: React.FC = () => {
 
       {/* Content Area */}
       <div className="flex-1 bg-surface rounded-3xl border border-[var(--color-border)] shadow-sm overflow-hidden flex flex-col relative">
-         
          {viewMode === 'month' ? (
             <div className="flex flex-col h-full overflow-hidden">
                {/* Weekday Headers */}
@@ -241,7 +240,6 @@ const Calendar: React.FC = () => {
          ) : (
             <TimeBlockingView date={selectedDateKey} />
          )}
-
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
-
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+// Guideline: Always use import {GoogleGenAI} from "@google/genai";
+// Note: In a JS environment where require is used, we still use require but must follow initialization rules.
 const { GoogleGenAI } = require("@google/genai");
 
 admin.initializeApp();
@@ -32,14 +33,8 @@ exports.ai = functions.https.onRequest(async (req, res) => {
     await admin.auth().verifyIdToken(idToken);
 
     // 3. Initialize Gemini with secure server-side API Key
-    // Note: The key should be set in Firebase via: firebase functions:secrets:set API_KEY
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-      res.status(500).json({ message: "Server configuration error: Missing API Key" });
-      return;
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
+    // Guideline: Always use const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const { prompt, contents, config, model } = req.body;
 
     // 4. Generate Content following SDK rules
@@ -50,6 +45,7 @@ exports.ai = functions.https.onRequest(async (req, res) => {
     });
 
     // 5. Return payload
+    // Guideline: Access .text property directly
     res.json({
       text: response.text,
       functionCalls: response.functionCalls || null

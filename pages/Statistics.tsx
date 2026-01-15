@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { 
   Activity, Moon, CheckCircle2, ListTodo, Target, Droplets, Smile, DollarSign, 
@@ -41,7 +42,6 @@ const Statistics: React.FC = () => {
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
-  // Generate strictly the days of the selected month (1 to 28/29/30/31)
   const daysInMonth = useMemo(() => {
     const days = [];
     const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate();
@@ -54,7 +54,6 @@ const Statistics: React.FC = () => {
   const labels = daysInMonth.map(d => d.getDate().toString());
 
   // --- Data Aggregation Logic ---
-
   const sleepData = useMemo(() => {
     return daysInMonth.map(date => {
       const key = formatDateKey(date);
@@ -115,28 +114,6 @@ const Statistics: React.FC = () => {
     });
   }, [journal, daysInMonth]);
 
-  const adhkarData = useMemo(() => {
-    return daysInMonth.map(date => {
-      const key = formatDateKey(date);
-      const dayAdhkar = adhkar.find(a => a.date === key);
-      if (!dayAdhkar) return 0;
-      const isDone = (s: DeenStatus) => s === 'on-time' || s === 'late';
-      return (isDone(dayAdhkar.morningStatus) ? 1 : 0) + 
-             (isDone(dayAdhkar.eveningStatus) ? 1 : 0) + 
-             (isDone(dayAdhkar.nightStatus) ? 1 : 0);
-    });
-  }, [adhkar, daysInMonth]);
-
-  const sunnahData = useMemo(() => {
-    return daysInMonth.map(date => {
-      const key = formatDateKey(date);
-      const dayPrayer = prayers.find(p => p.date === key);
-      if (!dayPrayer) return 0;
-      const isDone = (s: DeenStatus) => s === 'on-time' || s === 'late';
-      return dayPrayer.sunnahs.filter(s => isDone(s.status)).length;
-    });
-  }, [prayers, daysInMonth]);
-
   const financeData = useMemo(() => {
     const income: number[] = [];
     const expense: number[] = [];
@@ -155,26 +132,32 @@ const Statistics: React.FC = () => {
     ];
   }, [transactions, daysInMonth]);
 
-  // Calculate Aggregates for Summary Cards
   const summaryStats = useMemo(() => {
     const totalTasks = tasksData.reduce((a, b) => a + b, 0);
     const sleepDays = sleepData.filter(d => d > 0);
     const avgSleep = sleepDays.length ? (sleepDays.reduce((a, b) => a + b, 0) / sleepDays.length).toFixed(1) : '0';
     const totalHabits = habitsData.reduce((a, b) => a + b, 0);
-    const totalSaved = financeData[2].data.reduce((a, b) => a + b, 0); // Savings index 2
+    const totalSaved = financeData[2].data.reduce((a, b) => a + b, 0);
 
     return { totalTasks, avgSleep, totalHabits, totalSaved };
   }, [tasksData, sleepData, habitsData, financeData]);
 
   if (sleepLoading) return <div className="p-8"><LoadingSkeleton count={4} /></div>;
 
-  const Widget = ({ title, icon: Icon, color, children, className = "" }: any) => (
-    <div className={`bg-surface rounded-3xl p-6 border border-[var(--color-border)] shadow-sm flex flex-col h-full bg-[image:radial-gradient(rgba(0,0,0,0.02)_1px,transparent_1px)] dark:bg-[image:radial-gradient(rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:16px_16px] hover:shadow-md transition-shadow ${className}`}>
-       <div className="flex items-center gap-2 mb-6">
-          <div className={`p-2 rounded-xl bg-${color}-50 dark:bg-${color}-900/20 text-${color}-600 dark:text-${color}-400`}>
-             <Icon size={18} />
+  const Widget = ({ title, icon: Icon, color, children, statusLabel, className = "" }: any) => (
+    <div className={`bg-surface rounded-3xl p-6 border border-[var(--color-border)] shadow-sm flex flex-col h-full hover:shadow-md transition-shadow ${className}`}>
+       <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+             <div className={`p-2 rounded-xl bg-${color}-50 dark:bg-${color}-900/20 text-${color}-600 dark:text-${color}-400`}>
+                <Icon size={18} />
+             </div>
+             <h3 className="font-bold text-foreground uppercase tracking-tight text-sm">{title}</h3>
           </div>
-          <h3 className="font-bold text-foreground uppercase tracking-tight text-sm">{title}</h3>
+          {statusLabel && (
+             <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-${color}-50 text-${color}-600`}>
+                {statusLabel}
+             </span>
+          )}
        </div>
        <div className="flex-1 min-h-[180px]">
           {children}
@@ -192,9 +175,9 @@ const Statistics: React.FC = () => {
               <BarChart3 size={20} sm-size={24} strokeWidth={2.5} />
            </div>
            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tighter uppercase">Analytics</h1>
+              <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tighter uppercase">Intelligence Hub</h1>
               <div className="flex items-center gap-3 mt-0.5">
-                 <span className="text-[9px] sm:text-[10px] font-bold text-muted uppercase tracking-widest">Performance Insights</span>
+                 <span className="text-[9px] sm:text-[10px] font-bold text-muted uppercase tracking-widest">Performance Telemetry</span>
               </div>
            </div>
         </div>
@@ -211,7 +194,6 @@ const Statistics: React.FC = () => {
                </button>
             </div>
 
-            {/* Grid-based Month Selector */}
             <div className="flex-1 w-full overflow-x-auto no-scrollbar">
                <div className="flex xl:grid xl:grid-cols-12 gap-1.5 p-1">
                   {months.map((m, i) => (
@@ -230,50 +212,26 @@ const Statistics: React.FC = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-         <StatsCard 
-            title="Tasks Completed" 
-            value={summaryStats.totalTasks} 
-            icon={ListTodo} 
-            color="blue" 
-            subtitle="This Month"
-         />
-         <StatsCard 
-            title="Avg Sleep" 
-            value={`${summaryStats.avgSleep}h`} 
-            icon={Moon} 
-            color="indigo" 
-            subtitle="Daily Average"
-         />
-         <StatsCard 
-            title="Habit Volume" 
-            value={summaryStats.totalHabits} 
-            icon={CheckCircle2} 
-            color="emerald" 
-            subtitle="Total Reps"
-         />
-         <StatsCard 
-            title="Net Savings" 
-            value={getFormattedCurrency(summaryStats.totalSaved).split('.')[0]} 
-            icon={Wallet} 
-            color="green" 
-            subtitle="Monthly Saved"
-         />
+         <StatsCard title="Objectives Secured" value={summaryStats.totalTasks} icon={ListTodo} color="blue" subtitle="This Month" />
+         <StatsCard title="Recovery Avg" value={`${summaryStats.avgSleep}h`} icon={Moon} color="indigo" subtitle="Daily Average" />
+         <StatsCard title="System Flow" value={summaryStats.totalHabits} icon={CheckCircle2} color="emerald" subtitle="Routine Reps" />
+         <StatsCard title="Capital Growth" value={getFormattedCurrency(summaryStats.totalSaved).split('.')[0]} icon={Wallet} color="green" subtitle="Monthly Savings" />
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-12">
          {/* Productivity Section */}
          <section>
             <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4 flex items-center gap-2">
                <Brain size={16} /> Productivity Core
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-               <Widget title="Task Completion" icon={ListTodo} color="blue">
+               <Widget title="Task Velocity" icon={ListTodo} color="blue" statusLabel="Analyzing Velocity">
                   <LineChart data={tasksData} labels={labels} color="#3b82f6" height={180} />
                </Widget>
-               <Widget title="Habit Consistency" icon={CheckCircle2} color="emerald">
+               <Widget title="Routine Integrity" icon={CheckCircle2} color="emerald" statusLabel="Stable Flow">
                   <LineChart data={habitsData} labels={labels} color="#10b981" height={180} />
                </Widget>
-               <Widget title="Goal Advancement" icon={Target} color="amber">
+               <Widget title="Vision Progress" icon={Target} color="amber" statusLabel="Ascending">
                   <LineChart data={goalsData} labels={labels} color="#f59e0b" height={180} />
                </Widget>
             </div>
@@ -282,45 +240,28 @@ const Statistics: React.FC = () => {
          {/* Wellness Section */}
          <section>
             <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4 flex items-center gap-2">
-               <Activity size={16} /> Health & Vitality
+               <Activity size={16} /> Vitality Log
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-               <Widget title="Sleep Duration" icon={Moon} color="indigo">
+               <Widget title="Sleep Cycle" icon={Moon} color="indigo" statusLabel="Recovery Audit">
                   <LineChart data={sleepData} labels={labels} color="#6366f1" height={180} goalValue={settings?.sleep?.targetHours || 8} />
                </Widget>
-               <Widget title="Hydration" icon={Droplets} color="cyan">
+               <Widget title="Hydration" icon={Droplets} color="cyan" statusLabel="Fuel Check">
                   <LineChart data={hydrationData} labels={labels} color="#06b6d4" height={180} goalValue={settings?.meals?.waterGoal || 8} />
                </Widget>
-               <Widget title="Mood & Journaling" icon={Smile} color="pink">
+               <Widget title="Vibrance" icon={Smile} color="pink" statusLabel="Mood Sync">
                   <LineChart data={moodData} labels={labels} color="#ec4899" height={180} />
                </Widget>
             </div>
          </section>
 
-         {/* Deen Section (Conditional) */}
-         {settings?.preferences?.enableIslamicFeatures && (
-            <section>
-               <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <Moon size={16} /> Spiritual Growth
-               </h2>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Widget title="Daily Adhkar" icon={Sparkles} color="purple">
-                      <LineChart data={adhkarData} labels={labels} color="#8b5cf6" height={180} goalValue={3} />
-                  </Widget>
-                  <Widget title="Sunnah Prayers" icon={Star} color="orange">
-                      <LineChart data={sunnahData} labels={labels} color="#f97316" height={180} goalValue={5} />
-                  </Widget>
-               </div>
-            </section>
-         )}
-
-         {/* Finance Section */}
+         {/* Financial Section */}
          <section>
             <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4 flex items-center gap-2">
-               <DollarSign size={16} /> Financial Health
+               <DollarSign size={16} /> Economic Dashboard
             </h2>
             <div className="grid grid-cols-1">
-               <Widget title="Financial Flow" icon={TrendingUp} color="green">
+               <Widget title="Portfolio Flow" icon={TrendingUp} color="green" statusLabel="Capital Allocation">
                   <MultiLineChart datasets={financeData} labels={labels} height={250} />
                </Widget>
             </div>

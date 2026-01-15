@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   CheckCircle2, ListTodo, Sun, Moon, Sunrise, 
@@ -49,11 +50,12 @@ const Today: React.FC = () => {
     return habits.filter(h => !h.archived && h.frequency.days.includes(dayIndex));
   }, [habits, selectedDateObject]);
 
-  const { urgentTasks, routineTasks } = useMemo(() => {
-    const active = tasks.filter(t => t.dueDate === selectedDate && !t.completed);
+  const { urgentTasks, routineTasks, completedTasksToday } = useMemo(() => {
+    const todaysTasks = tasks.filter(t => t.dueDate === selectedDate);
     return {
-      urgentTasks: active.filter(t => t.priority === 'high'),
-      routineTasks: active.filter(t => t.priority !== 'high')
+      urgentTasks: todaysTasks.filter(t => t.priority === 'high' && !t.completed),
+      routineTasks: todaysTasks.filter(t => t.priority !== 'high' && !t.completed),
+      completedTasksToday: todaysTasks.filter(t => t.completed)
     };
   }, [tasks, selectedDate]);
 
@@ -165,7 +167,14 @@ const Today: React.FC = () => {
                            <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">Urgent</span>
                         </div>
                         {urgentTasks.map(task => (
-                           <TaskCard key={task.id} task={task} onToggle={() => toggleTask(task.id)} onEdit={() => setEditingTask(task)} onDelete={() => deleteTask(task.id)} />
+                           <TaskCard 
+                             key={task.id} 
+                             task={task} 
+                             onToggle={() => toggleTask(task.id)} 
+                             onEdit={() => setEditingTask(task)} 
+                             onDelete={() => deleteTask(task.id)}
+                             onToggleSubtask={(sid) => toggleSubtask(task.id, sid)}
+                           />
                         ))}
                      </div>
                   )}
@@ -177,12 +186,37 @@ const Today: React.FC = () => {
                            <span className="text-[8px] font-black text-primary-500 uppercase tracking-widest">Routine</span>
                         </div>
                         {routineTasks.map(task => (
-                           <TaskCard key={task.id} task={task} onToggle={() => toggleTask(task.id)} onEdit={() => setEditingTask(task)} onDelete={() => deleteTask(task.id)} />
+                           <TaskCard 
+                             key={task.id} 
+                             task={task} 
+                             onToggle={() => toggleTask(task.id)} 
+                             onEdit={() => setEditingTask(task)} 
+                             onDelete={() => deleteTask(task.id)}
+                             onToggleSubtask={(sid) => toggleSubtask(task.id, sid)}
+                           />
                         ))}
                      </div>
                   )}
 
-                  {urgentTasks.length === 0 && routineTasks.length === 0 && (
+                  {completedTasksToday.length > 0 && (
+                     <div className="space-y-2 pt-6 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500 border-t border-foreground/5">
+                        <div className="flex items-center gap-2 px-1">
+                           <span className="text-[8px] font-black text-muted uppercase tracking-widest">Finished</span>
+                        </div>
+                        {completedTasksToday.map(task => (
+                           <TaskCard 
+                             key={task.id} 
+                             task={task} 
+                             onToggle={() => toggleTask(task.id)} 
+                             onEdit={() => setEditingTask(task)} 
+                             onDelete={() => deleteTask(task.id)}
+                             onToggleSubtask={(sid) => toggleSubtask(task.id, sid)}
+                           />
+                        ))}
+                     </div>
+                  )}
+
+                  {urgentTasks.length === 0 && routineTasks.length === 0 && completedTasksToday.length === 0 && (
                      <div className="flex-1 flex flex-col items-center justify-center py-10 sm:py-20 opacity-30 text-center">
                         <Check size={48} strokeWidth={1} />
                         <p className="text-[10px] font-black uppercase tracking-widest mt-3">Objectives Secured</p>

@@ -1,10 +1,11 @@
-
 import React, { useState } from 'react';
-import { X, Plus, Calendar, Tag, Flag, Clock, CheckCircle2, ListTodo, Trash2, ArrowRight, LayoutGrid, CalendarRange } from 'lucide-react';
+import { X, Plus, Calendar, Tag, Flag, Clock, CheckCircle2, ListTodo, Trash2, ArrowRight, LayoutGrid, CalendarRange, Wand2, Loader2 } from 'lucide-react';
 import { Task, Subtask } from '../types';
 import { getTodayKey, getWeekKey, getMonthKey } from '../utils/dateUtils';
 import { useSettings } from '../context/SettingsContext';
 import { ConfirmationModal } from './ConfirmationModal';
+import { GoogleGenAI, Type } from "@google/genai";
+import { useToast } from '../context/ToastContext';
 
 interface TaskFormProps {
   initialData?: Partial<Task>;
@@ -22,6 +23,7 @@ const PRIORITIES = [
 
 export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose, onDelete }) => {
   const { settings } = useSettings();
+  const { showToast } = useToast();
   
   // Determine initial timeframe
   const [timeframe, setTimeframe] = useState<'day' | 'week' | 'month'>(() => {
@@ -41,6 +43,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
   const [dueMonth, setDueMonth] = useState(initialData?.dueMonth || getMonthKey(new Date()));
   
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
   
   // Tags
   const [tags, setTags] = useState<string[]>(initialData?.tags || []);
@@ -49,6 +52,52 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
   // Subtasks
   const [subtasks, setSubtasks] = useState<Subtask[]>(initialData?.subtasks || []);
   const [subtaskInput, setSubtaskInput] = useState('');
+
+  const handleEnhance = async () => {
+    if (!title.trim() || isEnhancing) return;
+    
+    setIsEnhancing(true);
+    showToast("Architecting SMART task...", "info");
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Rewrite this task into a high-performance SMART task: "${title}". Current description: "${description || 'None'}".`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              description: { type: Type.STRING },
+              suggestedSubtasks: { type: Type.ARRAY, items: { type: Type.STRING } }
+            },
+            required: ["title", "description", "suggestedSubtasks"]
+          },
+          systemInstruction: "You are the LifeOS Performance Architect. Convert simple tasks into Specific, Measurable, Achievable, Relevant, and Time-bound objectives. Return JSON format."
+        }
+      });
+
+      const data = JSON.parse(response.text || '{}');
+      setTitle(data.title);
+      setDescription(data.description);
+      
+      const newSubtasks = data.suggestedSubtasks.map((s: string) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        title: s,
+        completed: false
+      }));
+      setSubtasks([...subtasks, ...newSubtasks]);
+
+      showToast("Task enhanced", "success");
+    } catch (error) {
+      console.error("Enhancement Error:", error);
+      showToast("Strategic engine busy", "error");
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,7 +181,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
         
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-gray-700">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white uppercase tracking-tighter">
             {initialData?.id ? 'Edit Task' : 'New Task'}
           </h2>
           <div className="flex items-center gap-2">
@@ -178,16 +227,27 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
 
           {/* Title & Desc */}
           <div className="space-y-4">
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
-              <input 
-                type="text" 
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="What needs to be done?" 
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none transition-all"
-                autoFocus
-              />
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="What needs to be done?" 
+                  className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none transition-all font-bold"
+                  autoFocus
+                />
+                <button 
+                  type="button"
+                  onClick={handleEnhance}
+                  disabled={!title.trim() || isEnhancing}
+                  className={`px-4 rounded-xl border transition-all flex items-center justify-center gap-2 ${isEnhancing ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-500 border-primary-100' : 'bg-white dark:bg-gray-700 text-amber-500 border-gray-200 dark:border-gray-600 hover:border-amber-400 hover:bg-amber-50'}`}
+                  title="SMART Enhance with AI"
+                >
+                  {isEnhancing ? <Loader2 size={18} className="animate-spin" /> : <Wand2 size={18} />}
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>

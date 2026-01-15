@@ -1,8 +1,11 @@
-import React from 'react';
-import { Check, Edit2, Trash2, Clock, ListTodo, Tag, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Check, Edit2, Trash2, Clock, Wand2, Loader2, AlertCircle } from 'lucide-react';
 import { Task } from '../types';
 import { getTodayKey } from '../utils/dateUtils';
 import { triggerConfetti } from '../utils/confetti';
+import { GoogleGenAI, Type } from "@google/genai";
+import { useTasks } from '../context/TaskContext';
+import { useToast } from '../context/ToastContext';
 
 interface TaskCardProps {
   task: Task;
@@ -13,38 +16,20 @@ interface TaskCardProps {
 }
 
 export const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onEdit, onDelete, onToggleSubtask }) => {
+  const { updateTask, toggleSubtask } = useTasks();
+  const { showToast } = useToast();
+  const [isEnhancing, setIsEnhancing] = useState(false);
+
   const todayKey = getTodayKey();
   const isOverdue = !task.completed && task.dueDate && task.dueDate < todayKey;
   
-  const completedSubtasks = task.subtasks.filter(s => s.completed).length;
   const totalSubtasks = task.subtasks.length;
-  const progress = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
 
-  const priorityStyles = {
-    high: {
-      bg: 'bg-red-500/5',
-      border: 'border-red-500/20',
-      accent: 'bg-red-500',
-      text: 'text-red-600 dark:text-red-400',
-      indicator: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]'
-    },
-    medium: {
-      bg: 'bg-amber-500/5',
-      border: 'border-amber-500/20',
-      accent: 'bg-amber-500',
-      text: 'text-amber-600 dark:text-amber-400',
-      indicator: 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
-    },
-    low: {
-      bg: 'bg-blue-500/5',
-      border: 'border-blue-500/20',
-      accent: 'bg-blue-500',
-      text: 'text-blue-600 dark:text-blue-400',
-      indicator: 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.4)]'
-    }
+  const priorityColors = {
+    high: 'border-rose-500/20 text-rose-500',
+    medium: 'border-amber-500/20 text-amber-500',
+    low: 'border-blue-500/20 text-blue-500'
   };
-
-  const style = priorityStyles[task.priority];
 
   const handleMainToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -55,109 +40,166 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onToggle, onEdit, onDe
     onToggle();
   };
 
+  const handleSubItemClick = (e: React.MouseEvent, subId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onToggleSubtask) {
+      onToggleSubtask(subId);
+    } else {
+      toggleSubtask(task.id, subId);
+    }
+  };
+
+  const handleEnhance = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isEnhancing) return;
+    
+    setIsEnhancing(true);
+    showToast("Architecting SMART task...", "info");
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Rewrite this task into a high-performance SMART task: "${task.title}". Current description: "${task.description || 'None'}".`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              description: { type: Type.STRING },
+              suggestedSubtasks: { type: Type.ARRAY, items: { type: Type.STRING } }
+            },
+            required: ["title", "description", "suggestedSubtasks"]
+          },
+          systemInstruction: "You are the LifeOS Performance Architect. Convert simple tasks into Specific, Measurable, Achievable, Relevant, and Time-bound objectives. Return JSON format."
+        }
+      });
+
+      const data = JSON.parse(response.text || '{}');
+      
+      const newSubtasks = data.suggestedSubtasks.map((s: string) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        title: s,
+        completed: false
+      }));
+
+      await updateTask(task.id, {
+        title: data.title,
+        description: data.description,
+        subtasks: [...task.subtasks, ...newSubtasks]
+      });
+
+      showToast("Strategy applied", "success");
+    } catch (error) {
+      console.error("Enhancement Error:", error);
+      showToast("Strategic engine busy", "error");
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
+
   return (
     <div 
       className={`
-        group relative flex flex-col p-5 rounded-[2rem] transition-all duration-500 border backdrop-blur-xl
+        group relative flex flex-col p-4 sm:p-5 rounded-[2rem] transition-all duration-300 border
         ${task.completed 
-          ? 'bg-foreground/5 opacity-60 border-transparent grayscale' 
-          : `${style.bg} ${style.border} shadow-sm hover:shadow-2xl hover:shadow-black/5 hover:-translate-y-0.5`
+          ? 'bg-foreground/[0.01] opacity-60 border-transparent' 
+          : 'bg-surface border-foreground/5 shadow-sm hover:shadow-lg'
         }
       `}
     >
-      {/* Side Accent Line */}
-      {!task.completed && (
-        <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-12 rounded-r-full transition-all duration-500 group-hover:h-16 ${style.indicator}`} />
-      )}
-
-      <div className="flex items-start gap-4 relative z-10">
-        {/* Checkbox Trigger - Resized to be smaller */}
+      <div className="flex items-start gap-4">
+        {/* Main Checkbox */}
         <button 
           onClick={handleMainToggle}
           className={`
-            shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-700 border-2
+            shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-500 border-2
             ${task.completed 
-              ? 'bg-emerald-500 border-emerald-500 text-white rotate-[360deg] shadow-lg shadow-emerald-500/30' 
-              : 'bg-white dark:bg-gray-800 border-foreground/10 text-transparent hover:border-emerald-400/50 hover:scale-110 active:scale-90'
+              ? 'bg-emerald-500 border-emerald-500 text-white' 
+              : 'bg-white dark:bg-gray-800 border-foreground/10 text-transparent hover:border-emerald-400'
             }
           `}
         >
-          <Check size={18} strokeWidth={4} className={`transform transition-all duration-500 ${task.completed ? 'scale-100' : 'scale-50 opacity-0 group-hover:opacity-40 group-hover:text-emerald-500'}`} />
+          <Check size={18} strokeWidth={4} className={task.completed ? 'scale-100' : 'scale-0'} />
         </button>
 
         {/* Task Content */}
-        <div className="flex-1 min-w-0 space-y-3">
-          <div className="flex justify-between items-start">
-            <div className="space-y-1 flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                 {/* Category Badge */}
-                 <span className={`text-[8px] font-black uppercase tracking-[0.25em] px-2.5 py-1 rounded-lg border ${task.completed ? 'bg-foreground/5 text-muted border-transparent' : 'bg-white/80 dark:bg-black/20 border-foreground/5 text-muted'}`}>
-                    {task.category || 'Focus'}
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between items-start gap-2">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                 <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded-lg bg-foreground/[0.03] text-muted`}>
+                    {task.category || 'General'}
                  </span>
                  
                  {task.dueTime && (
-                    <span className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-[0.15em] px-2.5 py-1 rounded-lg bg-foreground/5 text-muted">
-                       <Clock size={10} strokeWidth={3} /> {task.dueTime}
+                    <span className="flex items-center gap-1 text-[8px] font-black uppercase text-muted/40">
+                       <Clock size={8} strokeWidth={3} /> {task.dueTime}
                     </span>
                  )}
                  
                  {isOverdue && (
-                    <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-[0.15em] px-2.5 py-1 rounded-lg bg-rose-500 text-white animate-pulse shadow-lg shadow-rose-500/20">
-                       <AlertCircle size={10} /> MISSING
+                    <span className="flex items-center gap-1 text-[8px] font-black uppercase text-rose-500">
+                       <AlertCircle size={8} /> MISSING
                     </span>
+                 )}
+
+                 {!task.completed && (
+                    <div className={`w-1.5 h-1.5 rounded-full bg-current ${priorityColors[task.priority].split(' ')[1]} opacity-50`} />
                  )}
               </div>
               
-              <h3 className={`text-lg sm:text-xl font-black tracking-tight leading-none transition-all duration-500 ${task.completed ? 'text-muted line-through opacity-50' : 'text-foreground group-hover:text-primary-600'}`}>
+              <h3 className={`text-base font-black tracking-tight leading-tight transition-all duration-300 ${task.completed ? 'text-muted line-through' : 'text-foreground'}`}>
                 {task.title}
               </h3>
             </div>
             
-            {/* Quick Actions */}
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
-               <button 
-                 onClick={(e) => { e.stopPropagation(); onEdit(); }} 
-                 className="p-2 text-muted hover:text-primary-600 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all shadow-sm border border-transparent hover:border-foreground/5"
-               >
-                 <Edit2 size={16} strokeWidth={2.5} />
+            {/* Actions - Simplified */}
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+               {!task.completed && (
+                 <button 
+                   onClick={handleEnhance}
+                   disabled={isEnhancing}
+                   className="p-1 text-muted hover:text-amber-500 transition-colors"
+                   title="AI SMART Enhance"
+                 >
+                   {isEnhancing ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} strokeWidth={2.5} />}
+                 </button>
+               )}
+               <button onClick={onEdit} className="p-1 text-muted hover:text-primary-600 transition-colors">
+                 <Edit2 size={14} strokeWidth={2.5} />
                </button>
-               <button 
-                 onClick={(e) => { e.stopPropagation(); onDelete(); }} 
-                 className="p-2 text-muted hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-xl transition-all shadow-sm border border-transparent hover:border-rose-500/20"
-               >
-                 <Trash2 size={16} strokeWidth={2.5} />
+               <button onClick={onDelete} className="p-1 text-muted hover:text-rose-500 transition-colors">
+                 <Trash2 size={14} strokeWidth={2.5} />
                </button>
             </div>
           </div>
 
-          {/* Progress / Subtasks Bar */}
-          {totalSubtasks > 0 && !task.completed && (
-            <div className="space-y-2 pt-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-[9px] font-black text-muted uppercase tracking-[0.2em]">
-                   <ListTodo size={12} strokeWidth={3} />
-                   <span>Milestones</span>
-                </div>
-                <span className="text-[9px] font-black text-muted tabular-nums uppercase tracking-widest">{completedSubtasks} / {totalSubtasks}</span>
-              </div>
-              <div className="h-1.5 w-full bg-foreground/[0.03] rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full transition-all duration-1000 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${style.accent}`} 
-                    style={{ width: `${progress}%` }} 
-                  />
-              </div>
+          {/* Inline Subtasks - Visible List */}
+          {totalSubtasks > 0 && (
+            <div className="mt-3 space-y-1.5 pt-3 border-t border-foreground/[0.03]">
+               {task.subtasks.map(sub => (
+                 <div 
+                   key={sub.id}
+                   onClick={(e) => handleSubItemClick(e, sub.id)}
+                   className="flex items-center gap-2.5 cursor-pointer group/sub py-0.5"
+                 >
+                    <div className={`
+                      shrink-0 w-4 h-4 rounded-md border flex items-center justify-center transition-all
+                      ${sub.completed 
+                        ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-600' 
+                        : 'border-foreground/10 text-transparent group-hover/sub:border-emerald-400/50'}
+                    `}>
+                      <Check size={8} strokeWidth={4} className={sub.completed ? 'scale-100' : 'scale-0'} />
+                    </div>
+                    <span className={`text-[11px] font-bold truncate transition-all ${sub.completed ? 'text-muted line-through opacity-50' : 'text-foreground/80'}`}>
+                      {sub.title}
+                    </span>
+                 </div>
+               ))}
             </div>
-          )}
-          
-          {/* Tags */}
-          {task.tags?.length > 0 && !task.completed && (
-             <div className="flex flex-wrap gap-2 pt-1">
-                {task.tags.slice(0, 3).map(tag => (
-                   <span key={tag} className="flex items-center gap-1 text-[8px] font-black text-primary-500/60 uppercase tracking-widest">
-                      <Tag size={8} /> {tag}
-                   </span>
-                ))}
-             </div>
           )}
         </div>
       </div>
