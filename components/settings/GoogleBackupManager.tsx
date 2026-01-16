@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Cloud, LogOut, Check, Loader2, RefreshCw, AlertTriangle, ShieldCheck, Smartphone, ExternalLink, Sparkles } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
@@ -198,7 +199,7 @@ export const GoogleBackupManager: React.FC = () => {
               <div className="flex gap-2">
                  <button 
                    onClick={syncNow}
-                   disabled={isSyncing || syncStatus !== 'ready'}
+                   disabled={isSyncing || syncStatus !== 'stable'}
                    className="flex-[2] py-3.5 bg-primary text-white rounded-2xl font-black text-[10px] sm:text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl shadow-primary-500/20 transition-all active:scale-[0.94] disabled:opacity-50 hover:bg-primary-600"
                  >
                     <RefreshCw size={14} strokeWidth={3} className={isSyncing ? "animate-spin" : ""} /> Force Update
