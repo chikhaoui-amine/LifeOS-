@@ -1,8 +1,10 @@
+
 import React, { useState } from 'react';
-import { X, Plus, Calendar, Tag, Flag, Clock, CheckCircle2, ListTodo, Trash2, ArrowRight, LayoutGrid, CalendarRange, Wand2, Loader2 } from 'lucide-react';
-import { Task, Subtask } from '../types';
+import { X, Plus, Calendar, Tag, Flag, Clock, CheckCircle2, ListTodo, Trash2, ArrowRight, LayoutGrid, CalendarRange, Wand2, Loader2, Layers } from 'lucide-react';
+import { Task, Subtask, TaskTimeframe } from '../types';
 import { getTodayKey, getWeekKey, getMonthKey } from '../utils/dateUtils';
 import { useSettings } from '../context/SettingsContext';
+import { useTasks } from '../context/TaskContext';
 import { ConfirmationModal } from './ConfirmationModal';
 import { GoogleGenAI, Type } from "@google/genai";
 import { useToast } from '../context/ToastContext';
@@ -23,10 +25,11 @@ const PRIORITIES = [
 
 export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose, onDelete }) => {
   const { settings } = useSettings();
+  const { sections } = useTasks();
   const { showToast } = useToast();
   
   // Determine initial timeframe
-  const [timeframe, setTimeframe] = useState<'day' | 'week' | 'month'>(() => {
+  const [timeframe, setTimeframe] = useState<TaskTimeframe>(() => {
     if (initialData?.dueMonth) return 'month';
     if (initialData?.dueWeek) return 'week';
     return 'day';
@@ -36,6 +39,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
   const [description, setDescription] = useState(initialData?.description || '');
   const [category, setCategory] = useState(initialData?.category || 'Work');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>(initialData?.priority || 'medium');
+  const [sectionId, setSectionId] = useState(initialData?.sectionId || '');
   
   const [dueDate, setDueDate] = useState(initialData?.dueDate || getTodayKey());
   const [dueTime, setDueTime] = useState(initialData?.dueTime || '');
@@ -52,6 +56,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
   // Subtasks
   const [subtasks, setSubtasks] = useState<Subtask[]>(initialData?.subtasks || []);
   const [subtaskInput, setSubtaskInput] = useState('');
+
+  const filteredSections = sections.filter(s => s.timeframe === timeframe);
 
   const handleEnhance = async () => {
     if (!title.trim() || isEnhancing) return;
@@ -109,9 +115,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
       description,
       category,
       priority,
+      sectionId: sectionId || undefined,
       tags,
       subtasks,
-      // Clear other period fields based on selected timeframe
       dueDate: timeframe === 'day' ? dueDate : undefined,
       dueTime: timeframe === 'day' ? dueTime : undefined,
       dueWeek: timeframe === 'week' ? dueWeek : undefined,
@@ -206,20 +212,20 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
           
           {/* Timeframe Selection */}
           <div className="space-y-2">
-             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Timeframe</label>
+             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Temporal Scale</label>
              <div className="flex bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
                 {[
-                  { id: 'day', label: 'Specific Day', icon: Calendar },
-                  { id: 'week', label: 'Whole Week', icon: LayoutGrid },
-                  { id: 'month', label: 'Whole Month', icon: CalendarRange }
+                  { id: 'day', label: 'Day', icon: Calendar },
+                  { id: 'week', label: 'Week', icon: LayoutGrid },
+                  { id: 'month', label: 'Month', icon: CalendarRange }
                 ].map(t => (
                   <button 
                     key={t.id}
                     type="button"
-                    onClick={() => setTimeframe(t.id as any)}
+                    onClick={() => { setTimeframe(t.id as any); setSectionId(''); }}
                     className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all ${timeframe === t.id ? 'bg-white dark:bg-gray-700 text-primary-600 shadow-sm' : 'text-gray-400'}`}
                   >
-                    <t.icon size={14} /> {t.label.split(' ')[1]}
+                    <t.icon size={14} /> {t.label}
                   </button>
                 ))}
              </div>
@@ -228,13 +234,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
           {/* Title & Desc */}
           <div className="space-y-4">
             <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Objective</label>
               <div className="flex gap-2">
                 <input 
                   type="text" 
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="What needs to be done?" 
+                  placeholder="Define objective..." 
                   className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none transition-all font-bold"
                   autoFocus
                 />
@@ -243,49 +249,70 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
                   onClick={handleEnhance}
                   disabled={!title.trim() || isEnhancing}
                   className={`px-4 rounded-xl border transition-all flex items-center justify-center gap-2 ${isEnhancing ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-500 border-primary-100' : 'bg-white dark:bg-gray-700 text-amber-500 border-gray-200 dark:border-gray-600 hover:border-amber-400 hover:bg-amber-50'}`}
-                  title="SMART Enhance with AI"
+                  title="Architect SMART Strategy"
                 >
                   {isEnhancing ? <Loader2 size={18} className="animate-spin" /> : <Wand2 size={18} />}
                 </button>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Strategy Details</label>
               <textarea 
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Add details, notes, or links..." 
+                placeholder="Tactical details, links, or notes..." 
                 rows={3}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none transition-all resize-none"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none transition-all resize-none font-medium"
               />
             </div>
           </div>
+
+          {/* Section Selection */}
+          {filteredSections.length > 0 && (
+             <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Workspace Segment ({timeframe})</label>
+                <div className="relative">
+                   <Layers className="absolute left-3 top-1/2 -translate-y-1/2 text-primary-500 pointer-events-none" size={18} />
+                   <select 
+                      value={sectionId}
+                      onChange={(e) => setSectionId(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 outline-none appearance-none font-bold"
+                    >
+                      <option value="">Uncategorized</option>
+                      {filteredSections.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                       <ArrowRight size={14} className="rotate-90" />
+                    </div>
+                </div>
+             </div>
+          )}
 
           {/* Conditional Date Selection */}
           <div className="animate-in fade-in slide-in-from-top-2 duration-300">
             {timeframe === 'day' && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target Date</label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={18} />
                     <input 
                       type="date"
                       value={dueDate}
                       onChange={(e) => setDueDate(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 outline-none font-bold"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Anchor Time</label>
                   <div className="relative">
                     <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={18} />
                     <input 
                       type="time"
                       value={dueTime}
                       onChange={(e) => setDueTime(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 outline-none font-bold"
                     />
                   </div>
                 </div>
@@ -294,30 +321,30 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
 
             {timeframe === 'week' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target Week</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Objective Week</label>
                 <div className="relative">
                   <LayoutGrid className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                   <input 
                     type="date"
                     value={dueWeek}
                     onChange={(e) => setDueWeek(getWeekKey(new Date(e.target.value), settings.preferences.startOfWeek))}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white font-bold"
                   />
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1 uppercase font-bold tracking-widest">Sets objective for the whole week starting {dueWeek}</p>
+                <p className="text-[10px] text-gray-400 mt-1 uppercase font-bold tracking-widest">Week beginning {dueWeek}</p>
               </div>
             )}
 
             {timeframe === 'month' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target Month</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Strategy Month</label>
                 <div className="relative">
                   <CalendarRange className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                   <input 
                     type="month"
                     value={dueMonth}
                     onChange={(e) => setDueMonth(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white font-bold"
                   />
                 </div>
               </div>
@@ -347,11 +374,11 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
                 </div>
              </div>
              <div>
-               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category</label>
+               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Project Cluster</label>
                <select 
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+                  className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 outline-none font-bold"
                 >
                   {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
@@ -360,12 +387,12 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
 
           {/* Subtasks */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Subtasks</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tactical Breakdown</label>
             <div className="space-y-2 mb-3">
               {subtasks.map((st, i) => (
-                <div key={st.id} className="flex items-center gap-2 group">
+                <div key={st.id} className="flex items-center gap-2 group animate-in slide-in-from-left duration-200">
                    <CheckCircle2 size={16} className="text-gray-300" />
-                   <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">{st.title}</span>
+                   <span className="flex-1 text-sm text-gray-700 dark:text-gray-300 font-medium">{st.title}</span>
                    <button onClick={() => removeSubtask(st.id)} className="text-gray-400 hover:text-red-500 p-1">
                      <X size={14} />
                    </button>
@@ -380,8 +407,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
                     value={subtaskInput}
                     onChange={(e) => setSubtaskInput(e.target.value)}
                     onKeyDown={handleSubtaskKeyDown}
-                    placeholder="Add subtask..."
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
+                    placeholder="Add step..."
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 outline-none font-medium"
                   />
                </div>
                <button 
@@ -395,56 +422,22 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
             </div>
           </div>
 
-          {/* Tags */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tags</label>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {tags.map(tag => (
-                <span key={tag} className="px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 flex items-center gap-1">
-                  #{tag}
-                  <button onClick={() => removeTag(tag)} className="hover:text-red-500"><X size={12} /></button>
-                </span>
-              ))}
-            </div>
-            <div className="relative flex items-center gap-2">
-               <div className="relative flex-1">
-                  <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={18} />
-                  <input 
-                    type="text"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={handleTagKeyDown}
-                    placeholder="Add tag..."
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:border-primary-500 outline-none"
-                  />
-               </div>
-               <button 
-                 type="button" 
-                 onClick={addTag}
-                 disabled={!tagInput.trim()}
-                 className="p-3 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-colors disabled:opacity-50"
-               >
-                 <Plus size={20} />
-               </button>
-            </div>
-          </div>
-
         </div>
 
         {/* Footer */}
         <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex gap-4 bg-white dark:bg-gray-800 rounded-b-2xl">
           <button 
             onClick={onClose}
-            className="flex-1 py-3 rounded-xl font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="flex-1 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
-            Cancel
+            Abort
           </button>
           <button 
             onClick={handleSubmit}
             disabled={!title}
-            className="flex-1 py-3 rounded-xl font-medium text-white bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-500/20 disabled:opacity-50 disabled:shadow-none transition-all"
+            className="flex-1 py-3 rounded-xl font-bold text-[10px] uppercase tracking-[0.2em] text-white bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-500/20 disabled:opacity-50 disabled:shadow-none transition-all active:scale-95"
           >
-            Save Task
+            Deploy Objective
           </button>
         </div>
       </div>
@@ -453,10 +446,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({ initialData, onSave, onClose
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={confirmDelete}
-        title="Delete Task"
-        message="Are you sure you want to delete this task? This action cannot be undone."
+        title="Purge Objective"
+        message="Permanently remove this objective and its history from the architecture?"
         type="danger"
-        confirmText="Delete"
+        confirmText="Purge"
       />
     </div>
   );

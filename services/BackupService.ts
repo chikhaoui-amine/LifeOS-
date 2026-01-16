@@ -1,3 +1,4 @@
+
 import { BackupData, Habit, Task, AppSettings } from '../types';
 import { storage } from '../utils/storage';
 
@@ -12,6 +13,7 @@ export const STORAGE_KEYS = {
   HABITS: 'lifeos_habits_v2',
   HABIT_CATEGORIES: 'lifeos_habit_categories_v1',
   TASKS: 'lifeos_tasks_v2',
+  TASK_SECTIONS: 'lifeos_task_sections_v1',
   GOALS: 'lifeos_goals_v1',
   JOURNAL: 'lifeos_journal_v1',
   VISION_BOARD: 'lifeos_vision_board_v1',
@@ -109,6 +111,7 @@ export const BackupService = {
         if (data.habits) ops.push(storage.save(STORAGE_KEYS.HABITS, data.habits));
         if (data.habitCategories) ops.push(storage.save(STORAGE_KEYS.HABIT_CATEGORIES, data.habitCategories));
         if (data.tasks) ops.push(storage.save(STORAGE_KEYS.TASKS, data.tasks));
+        if (data.taskSections) ops.push(storage.save(STORAGE_KEYS.TASK_SECTIONS, data.taskSections));
         if (data.goals) ops.push(storage.save(STORAGE_KEYS.GOALS, data.goals));
         if (data.journal) ops.push(storage.save(STORAGE_KEYS.JOURNAL, data.journal));
         if (data.visionBoard) ops.push(storage.save(STORAGE_KEYS.VISION_BOARD, data.visionBoard));

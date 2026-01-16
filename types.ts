@@ -43,6 +43,15 @@ export interface Subtask {
   completed: boolean;
 }
 
+export type TaskTimeframe = 'day' | 'week' | 'month';
+
+export interface TaskSection {
+  id: string;
+  title: string;
+  timeframe: TaskTimeframe;
+  createdAt: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -54,6 +63,7 @@ export interface Task {
   dueWeek?: string; 
   dueMonth?: string; 
   category: string;
+  sectionId?: string;
   tags: string[];
   subtasks: Subtask[];
   completedAt?: string;
@@ -461,6 +471,7 @@ export interface BackupData {
   habits: Habit[];
   habitCategories?: string[];
   tasks: Task[];
+  taskSections?: TaskSection[];
   goals?: Goal[];
   journal?: JournalEntry[];
   visionBoard?: VisionItem[];
