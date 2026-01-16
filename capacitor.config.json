@@ -1,4 +1,3 @@
-
 {
   "appId": "com.lifeos.app",
   "appName": "LifeOS",
@@ -11,6 +10,6 @@
   "android": {
     "allowMixedContent": true,
     "captureInput": true,
-    "backgroundColor": "#4f46e5"
+    "backgroundColor": "#020617"
   }
 }

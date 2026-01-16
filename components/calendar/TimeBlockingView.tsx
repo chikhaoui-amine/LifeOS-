@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, Brain, Users, Home, Dumbbell, BookOpen, Coffee, Circle, Palette, DollarSign, Heart, MessageCircle, Archive, Briefcase, ShoppingCart, Plane } from 'lucide-react';
+import { Plus, Check, Brain, Users, Home, Dumbbell, BookOpen, Coffee, Circle, Palette, DollarSign, Heart, MessageCircle, Archive, Briefcase, ShoppingCart, Plane, Trash2 } from 'lucide-react';
 import { useTimeBlocks } from '../../context/TimeBlockContext';
 import { TimeBlockModal } from './TimeBlockModal';
 import { TimeBlock } from '../../types';
@@ -10,23 +10,23 @@ interface TimeBlockingViewProps {
   date: string;
 }
 
-// Category Configuration (Color & Icon)
-const CATEGORY_CONFIG: Record<string, { color: string; icon: any; bg: string }> = {
-  'Deep Work': { color: '#818cf8', bg: 'bg-indigo-500', icon: Brain },
-  'Meeting': { color: '#fbbf24', bg: 'bg-amber-500', icon: Users },
-  'Chore': { color: '#34d399', bg: 'bg-emerald-500', icon: Home },
-  'Health': { color: '#f87171', bg: 'bg-red-500', icon: Dumbbell },
-  'Learning': { color: '#f472b6', bg: 'bg-pink-500', icon: BookOpen },
-  'Break': { color: '#9ca3af', bg: 'bg-gray-500', icon: Coffee },
-  'Creative': { color: '#a78bfa', bg: 'bg-violet-500', icon: Palette },
-  'Finance': { color: '#4ade80', bg: 'bg-green-500', icon: DollarSign },
-  'Family': { color: '#fb7185', bg: 'bg-rose-500', icon: Heart },
-  'Social': { color: '#60a5fa', bg: 'bg-blue-500', icon: MessageCircle },
-  'Admin': { color: '#94a3b8', bg: 'bg-slate-500', icon: Archive },
-  'Work': { color: '#60a5fa', bg: 'bg-blue-600', icon: Briefcase },
-  'Shopping': { color: '#fcd34d', bg: 'bg-yellow-500', icon: ShoppingCart },
-  'Travel': { color: '#2dd4bf', bg: 'bg-teal-500', icon: Plane },
-  'Other': { color: '#60a5fa', bg: 'bg-blue-500', icon: Circle },
+// Category Icons Mapping
+const CATEGORY_ICONS: Record<string, any> = {
+  'Deep Work': Brain,
+  'Meeting': Users,
+  'Chore': Home,
+  'Health': Dumbbell,
+  'Learning': BookOpen,
+  'Break': Coffee,
+  'Creative': Palette,
+  'Finance': DollarSign,
+  'Family': Heart,
+  'Social': MessageCircle,
+  'Admin': Archive,
+  'Work': Briefcase,
+  'Shopping': ShoppingCart,
+  'Travel': Plane,
+  'Other': Circle,
 };
 
 export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
@@ -39,8 +39,8 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
   const blocks = getBlocksForDate(date);
   const isToday = date === getTodayKey();
 
-  // Layout Constants
-  const PIXELS_PER_MINUTE = 2; 
+  // Layout Constants - Reduced PIXELS_PER_MINUTE for zoom-out effect
+  const PIXELS_PER_MINUTE = 0.75; 
   const START_HOUR = 0;
   const END_HOUR = 24;
   const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * 60 * PIXELS_PER_MINUTE;
@@ -65,7 +65,7 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
         let scrollMins = 8 * 60; // Default 8am
         if (isToday) {
             const now = new Date();
-            scrollMins = Math.max(0, (now.getHours() * 60) - 60); 
+            scrollMins = Math.max(0, (now.getHours() * 60) - 120); 
         }
         
         setTimeout(() => {
@@ -77,10 +77,10 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
     }
 
     return () => clearInterval(interval);
-  }, [isToday]);
+  }, [isToday, PIXELS_PER_MINUTE]);
 
   const handleSave = async (data: any) => {
-    if (selectedBlock) {
+    if (selectedBlock && selectedBlock.id) {
       await updateBlock(selectedBlock.id, data);
     } else {
       await addBlock(data);
@@ -97,12 +97,9 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
   const handleTimelineClick = (e: React.MouseEvent) => {
       if (!scrollRef.current) return;
       const rect = scrollRef.current.getBoundingClientRect();
-      // Adjust click Y based on scroll position
       const clickY = e.clientY - rect.top + scrollRef.current.scrollTop;
       
       const clickedMinutes = Math.floor(clickY / PIXELS_PER_MINUTE);
-      
-      // Round to nearest 15
       const roundedMinutes = Math.floor(clickedMinutes / 15) * 15;
       const h = Math.floor(roundedMinutes / 60);
       const m = roundedMinutes % 60;
@@ -110,8 +107,7 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
       if (h >= END_HOUR) return;
 
       const timeString = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-      
-      setSelectedBlock({ startTime: timeString } as any);
+      setSelectedBlock({ startTime: timeString, date } as any);
       setIsModalOpen(true);
   };
 
@@ -127,7 +123,7 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
       </button>
 
       {/* Timeline Scroll Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto relative custom-scrollbar scroll-smooth">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto relative no-scrollbar custom-scrollbar scroll-smooth">
          
          <div 
             className="relative w-full" 
@@ -146,15 +142,11 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
                     className="absolute left-0 w-full flex items-start pointer-events-none"
                     style={{ top: top, height: 60 * PIXELS_PER_MINUTE }}
                   >
-                     {/* Hour Number */}
                      <div className="w-16 pl-4 pt-1">
-                        <span className="text-2xl font-bold text-gray-700 select-none">
+                        <span className="text-xl font-bold text-gray-700 select-none">
                            {String(hour).padStart(2, '0')}
                         </span>
                      </div>
-                     
-                     {/* Horizontal Guide Line (Subtle) */}
-                     {/* <div className="flex-1 border-t border-gray-800/50 mt-4 mr-4" /> */}
                   </div>
                );
             })}
@@ -166,7 +158,7 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
                  style={{ top: currentTimeMinutes * PIXELS_PER_MINUTE }}
                >
                   <div className="w-16 pl-2 pr-1 text-right">
-                     <span className="text-xs font-bold text-red-500 bg-[#09090b] px-1 py-0.5 rounded">
+                     <span className="text-[10px] font-bold text-red-500 bg-[#09090b] px-1 py-0.5 rounded">
                         {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
                      </span>
                   </div>
@@ -179,10 +171,9 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
                {sortedBlocks.map(block => {
                   const startMins = getMinutes(block.startTime);
                   const top = startMins * PIXELS_PER_MINUTE;
-                  const height = Math.max(block.duration * PIXELS_PER_MINUTE, 40); // Min visual height
+                  const height = Math.max(block.duration * PIXELS_PER_MINUTE, 20); 
                   
-                  const config = CATEGORY_CONFIG[block.category] || CATEGORY_CONFIG['Other'];
-                  const Icon = config.icon;
+                  const Icon = CATEGORY_ICONS[block.category] || Circle;
                   const isCompleted = block.completed;
 
                   return (
@@ -192,57 +183,65 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
                        className="absolute w-full group z-10 transition-all duration-200"
                        style={{ top: top, height: height }}
                      >
-                        <div className="flex h-full gap-3">
+                        <div className="flex h-full gap-2 py-0.5">
                            
-                           {/* Left Icon Pill */}
+                           {/* Left Icon Pill - Using block.color */}
                            <div 
                               className={`
-                                w-12 sm:w-14 rounded-2xl flex flex-col items-center justify-center shrink-0 transition-all
-                                ${config.bg} ${isCompleted ? 'opacity-50 grayscale' : 'shadow-lg'}
+                                w-10 sm:w-12 rounded-xl flex flex-col items-center justify-center shrink-0 transition-all
+                                ${isCompleted ? 'opacity-50 grayscale' : 'shadow-lg'}
                               `}
                               style={{ 
                                 height: '100%', 
-                                minHeight: '40px' 
+                                minHeight: '20px',
+                                backgroundColor: block.color || '#3b82f6'
                               }}
                            >
-                              <Icon size={20} className="text-white drop-shadow-sm" strokeWidth={2.5} />
+                              <Icon size={16} className="text-white drop-shadow-sm" strokeWidth={2.5} />
                            </div>
 
                            {/* Right Content Card */}
                            <div className={`
-                              flex-1 rounded-2xl border flex items-center justify-between px-4 py-2 transition-all
+                              flex-1 rounded-xl border flex items-center justify-between px-3 py-1 transition-all
                               ${isCompleted 
                                 ? 'bg-gray-900/40 border-gray-800 opacity-60' 
                                 : 'bg-[#18181b] border-gray-800 hover:border-gray-700 hover:bg-[#202023] shadow-sm'
                               }
                            `}>
-                              <div className="min-w-0 flex-1 pr-4">
-                                 <h4 className={`font-bold text-sm sm:text-base truncate leading-tight ${isCompleted ? 'text-gray-500 line-through' : 'text-white'}`}>
+                              <div className="min-w-0 flex-1 pr-2">
+                                 <h4 className={`font-bold text-[11px] sm:text-sm truncate leading-tight ${isCompleted ? 'text-gray-500 line-through' : 'text-white'}`}>
                                     {block.title}
                                  </h4>
-                                 <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500 font-medium">
-                                    <span>{block.startTime} - {block.endTime}</span>
-                                    <span>•</span>
-                                    <span>{block.duration}m</span>
-                                 </div>
+                                 {height > 35 && (
+                                   <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-500 font-medium">
+                                      <span>{block.startTime}</span>
+                                   </div>
+                                 )}
                               </div>
 
-                              <button
-                                onClick={(e) => { e.stopPropagation(); toggleBlock(block.id); }}
-                                className={`
-                                  w-6 h-6 sm:w-7 sm:h-7 rounded-lg border-2 flex items-center justify-center transition-all shrink-0
-                                  ${isCompleted 
-                                    ? `bg-${config.color} border-transparent text-white` 
-                                    : 'border-gray-600 text-transparent hover:border-gray-400'
-                                  }
-                                `}
-                                style={{ 
-                                   backgroundColor: isCompleted ? config.color : 'transparent',
-                                   borderColor: isCompleted ? 'transparent' : undefined 
-                                }}
-                              >
-                                 <Check size={14} strokeWidth={4} />
-                              </button>
+                              <div className="flex items-center gap-1">
+                                 <button
+                                   type="button"
+                                   onClick={(e) => { e.stopPropagation(); if(confirm('Delete block?')) deleteBlock(block.id); }}
+                                   className="p-1.5 text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                   title="Delete"
+                                 >
+                                    <Trash2 size={14} />
+                                 </button>
+                                 <button
+                                   type="button"
+                                   onClick={(e) => { e.stopPropagation(); toggleBlock(block.id); }}
+                                   className={`
+                                     w-5 h-5 sm:w-6 sm:h-6 rounded-md border-2 flex items-center justify-center transition-all shrink-0
+                                     ${isCompleted 
+                                       ? `bg-emerald-500 border-transparent text-white` 
+                                       : 'border-gray-600 text-transparent hover:border-gray-400'
+                                     }
+                                   `}
+                                 >
+                                    <Check size={12} strokeWidth={4} />
+                                 </button>
+                              </div>
                            </div>
 
                         </div>
@@ -260,7 +259,7 @@ export const TimeBlockingView: React.FC<TimeBlockingViewProps> = ({ date }) => {
             initialData={selectedBlock || undefined}
             onSave={handleSave}
             onClose={() => setIsModalOpen(false)}
-            onDelete={selectedBlock ? deleteBlock : undefined}
+            onDelete={selectedBlock && selectedBlock.id ? deleteBlock : undefined}
          />
       )}
     </div>

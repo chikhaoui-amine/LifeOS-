@@ -1,3 +1,4 @@
+
 import { initializeApp, getApps } from "firebase/app";
 import { 
   getAuth, 
@@ -16,35 +17,21 @@ import {
   doc, 
   setDoc, 
   onSnapshot, 
-  enableIndexedDbPersistence
+  enableIndexedDbPersistence,
+  serverTimestamp,
+  getDoc
 } from "firebase/firestore";
 import { BackupData } from '../types';
 
-const getFirebaseConfig = () => {
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem('lifeos_firebase_config');
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch (e) {
-        console.error("Failed to parse custom firebase config", e);
-      }
-    }
-  }
-  
-  // Default Project Credentials
-  return {
-    apiKey: "AIzaSyBVij7Op3syRyNkf74dywyepxnQ1Y94ers",
-    authDomain: "lifeos-c12c6.firebaseapp.com",
-    projectId: "lifeos-c12c6",
-    storageBucket: "lifeos-c12c6.firebasestorage.app",
-    messagingSenderId: "930274272186",
-    appId: "1:930274272186:web:d45482df340e67bf8fb383",
-    measurementId: "G-VQ3KXPQPT2"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyBVij7Op3syRyNkf74dywyepxnQ1Y94ers",
+  authDomain: "lifeos-c12c6.firebaseapp.com",
+  projectId: "lifeos-c12c6",
+  storageBucket: "lifeos-c12c6.firebasestorage.app",
+  messagingSenderId: "930274272186",
+  appId: "1:930274272186:web:d45482df340e67bf8fb383",
+  measurementId: "G-VQ3KXPQPT2"
 };
-
-const firebaseConfig = getFirebaseConfig();
 
 let app: any;
 let auth: any;
@@ -52,40 +39,40 @@ let db: any;
 let provider: any;
 
 const initializeFirebase = () => {
-  if (!firebaseConfig || !firebaseConfig.apiKey) return;
-
   if (getApps().length > 0) {
     app = getApps()[0];
   } else {
     try {
-      app = initializeApp(firebaseConfig);
+      // Fix: Check for custom configuration override in localStorage before initialization
+      let config = firebaseConfig;
+      const override = localStorage.getItem('lifeos_firebase_config_override');
+      if (override) {
+        try {
+          config = JSON.parse(override);
+          console.log("LifeOS Cloud: Using custom Firebase configuration.");
+        } catch (e) {
+          console.error("LifeOS Cloud: Failed to parse config override.");
+        }
+      }
+      app = initializeApp(config);
     } catch (e) {
-      console.error("Firebase Core Initialization failed:", e);
+      console.error("LifeOS Cloud: Initialization failed:", e);
     }
   }
 
   if (app) {
-    try {
-      auth = getAuth(app);
-      db = getFirestore(app);
-      provider = new GoogleAuthProvider();
-      provider.addScope('profile');
-      provider.addScope('email');
-      provider.setCustomParameters({ prompt: 'select_account' });
+    auth = getAuth(app);
+    db = getFirestore(app);
+    provider = new GoogleAuthProvider();
+    provider.addScope('profile');
+    provider.addScope('email');
+    
+    setPersistence(auth, browserLocalPersistence).catch(console.error);
 
-      setPersistence(auth, browserLocalPersistence).catch(e => console.warn("Persistence set error", e));
-
-      if (typeof window !== 'undefined') {
-        enableIndexedDbPersistence(db).catch((err) => {
-          if (err.code === 'failed-precondition') {
-            console.warn('Firestore Persistence restricted (Multiple tabs open)');
-          } else if (err.code === 'unimplemented') {
-            console.warn('Firestore Persistence unsupported by browser');
-          }
-        });
-      }
-    } catch(e) {
-      console.error("Firebase Service Initialization failed:", e);
+    if (typeof window !== 'undefined') {
+      enableIndexedDbPersistence(db).catch((err) => {
+        if (err.code === 'failed-precondition') console.warn('Cloud Persistence restricted: Multiple tabs.');
+      });
     }
   }
 };
@@ -97,122 +84,67 @@ export const FirebaseService = {
   get db() { return db; },
   currentUser: null as User | null,
 
-  isConfigured: (): boolean => !!auth,
-
   init: (onUserChange: (user: User | null) => void) => {
-    if (!auth) {
-      initializeFirebase();
-      if (!auth) return () => {};
-    }
-    
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) console.log("LifeOS Auth: Verified redirect session.");
-      })
-      .catch((error) => {
-        console.error("Firebase Redirect Resolution Error:", error);
-      });
-
-    return onAuthStateChanged(auth, (user: User | null) => {
+    if (!auth) initializeFirebase();
+    return onAuthStateChanged(auth, (user) => {
+      console.log(`LifeOS Auth: State change -> ${user ? user.email : 'No User'}`);
       FirebaseService.currentUser = user;
       onUserChange(user);
     });
   },
 
-  signIn: async (): Promise<User | void> => {
-    if (!auth) {
-      initializeFirebase();
-      if (!auth) throw new Error("Cloud subsystem not configured.");
-    }
-    
-    const isRestrictedEnv = typeof window !== 'undefined' && 
-      (window.location.protocol === 'file:' || (window as any).Capacitor || navigator.userAgent.includes('wv'));
-    
+  signIn: async () => {
+    console.log("LifeOS Auth: Initiating Google Gateway...");
     try {
-      if (isRestrictedEnv) {
-        await signInWithRedirect(auth, provider);
-        return; 
-      } else {
-        try {
-          const result = await signInWithPopup(auth, provider);
-          return result.user;
-        } catch (popupError: any) {
-          if (['auth/popup-blocked', 'auth/cancelled-popup-request', 'auth/popup-closed-by-user'].includes(popupError.code)) {
-            await signInWithRedirect(auth, provider);
-          } else {
-            throw popupError;
-          }
-        }
-      }
+      const result = await signInWithPopup(auth, provider);
+      return result.user;
     } catch (error: any) {
-      console.error("Sign-In Gateway Error:", error);
+      if (error.code === 'auth/popup-blocked') return await signInWithRedirect(auth, provider);
       throw error;
     }
   },
 
-  signOut: async (): Promise<void> => {
-    if (!auth) return;
-    try {
-      await firebaseSignOut(auth);
-      FirebaseService.currentUser = null;
-    } catch (error) {
-      console.error("Sign-Out Gateway Error:", error);
-      throw error;
-    }
+  signOut: async () => {
+    console.log("LifeOS Auth: Closing Cloud Channel...");
+    await firebaseSignOut(auth);
   },
 
+  // Fix: Added saveConfiguration method to allow custom Firebase setup
   saveConfiguration: (config: any) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('lifeos_firebase_config', JSON.stringify(config));
-      window.location.reload(); 
-    }
+    localStorage.setItem('lifeos_firebase_config_override', JSON.stringify(config));
+    window.location.reload();
   },
 
-  saveUserData: async (data: BackupData): Promise<void> => {
+  saveUserData: async (data: BackupData) => {
     if (!auth?.currentUser || !db) return;
+    const uid = auth.currentUser.uid;
+    const userRef = doc(db, "users", uid);
+    
+    const timestamp = new Date().toISOString();
+    console.log(`LifeOS Sync: Pushing local state to cloud [${timestamp}]...`);
 
     try {
-      const userRef = doc(db, "users", auth.currentUser.uid);
-      // Ensure we don't save with a null timestamp
-      const timestamp = data.exportDate || new Date().toISOString();
-      
-      await setDoc(userRef, { 
+      await setDoc(userRef, {
         ...data,
         exportDate: timestamp,
-        lastUpdated: timestamp,
-        serverTimestamp: new Date().toISOString(),
+        updatedAt: serverTimestamp(), // Use Firestore server time for reliable ordering
         metadata: {
           platform: navigator.platform,
-          version: data.appVersion
+          v: "2.0"
         }
-      }, { merge: false }); // Fully overwrite the doc to ensure structured consistency
+      }, { merge: true }); // Crucial: use merge to prevent wiping out unexpected fields
+      console.log("LifeOS Sync: Cloud push successful.");
     } catch (error) {
-      console.error("Firestore Upload Failed:", error);
+      console.error("LifeOS Sync: Cloud push failed:", error);
       throw error;
     }
   },
 
-  subscribeToUserData: (onDataReceived: (data: BackupData | null) => void) => {
-    if (!auth?.currentUser || !db) return () => {};
-
+  fetchCloudData: async () => {
+    if (!auth?.currentUser || !db) return null;
     const userRef = doc(db, "users", auth.currentUser.uid);
-    
-    return onSnapshot(userRef, (docSnap) => {
-      if (docSnap.metadata.hasPendingWrites) return;
-
-      if (docSnap.exists()) {
-        const content = docSnap.data();
-        if (content) {
-          onDataReceived(content as unknown as BackupData);
-        } else {
-          onDataReceived(null);
-        }
-      } else {
-        onDataReceived(null);
-      }
-    }, (error) => {
-      console.warn("Firestore Snapshot Subscription error:", error);
-    });
+    const snap = await getDoc(userRef);
+    return snap.exists() ? snap.data() as BackupData : null;
   }
 };
 

@@ -1,4 +1,3 @@
-
 {
   "short_name": "LifeOS",
   "name": "LifeOS - Productivity System",
@@ -18,8 +17,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "theme_color": "#4f46e5",
-  "background_color": "#ffffff",
+  "theme_color": "#E11D48",
+  "background_color": "#020617",
   "orientation": "portrait",
   "description": "A beautiful, minimalist all-in-one productivity app."
 }

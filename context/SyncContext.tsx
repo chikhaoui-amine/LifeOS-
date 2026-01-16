@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { useSettings } from './SettingsContext';
 import { useHabits } from './HabitContext';
@@ -19,7 +20,7 @@ import { useToast } from './ToastContext';
 import { BackupData } from '../types';
 import { storage } from '../utils/storage';
 
-type SyncStatus = 'idle' | 'connecting' | 'handshake' | 'ready' | 'error';
+type SyncStatus = 'idle' | 'connecting' | 'handshake' | 'stable' | 'syncing' | 'error';
 
 interface SyncContextType {
   isSyncing: boolean;
@@ -30,8 +31,6 @@ interface SyncContextType {
 }
 
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
-
-const LAST_CLOUD_TS_KEY = 'lifeos_last_cloud_sync_ts';
 
 export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { settings, setGoogleConnected } = useSettings();
@@ -51,38 +50,27 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   const { showToast } = useToast();
 
-  const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [user, setUser] = useState<User | null>(null);
   
   const isIncomingSync = useRef(false);
-  const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastUploadedTsRef = useRef<number>(0);
+  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isLocalReady = !habitsLoading && !tasksLoading && !journalLoading && !goalsLoading && !financeLoading && !mealsLoading && !sleepLoading && !timeLoading && !deenLoading && !visionLoading && !reportsLoading;
 
   const getCurrentSnapshot = useCallback((timestamp?: string): BackupData => {
-    const state = BackupService.createBackupData(habits, tasks, settings, timestamp);
-    state.habitCategories = habitCategories;
-    state.journal = journal;
-    state.goals = goals;
-    state.visionBoard = visionBoard;
-    state.reports = reports;
-    state.timeBlocks = timeBlocks;
-    state.finance = { accounts, transactions, budgets, savingsGoals, currency };
-    state.meals = { recipes, foods, mealPlans, shoppingList };
-    state.sleepLogs = sleepLogs;
-    state.sleepSettings = sleepSettings;
-    state.prayers = prayers;
-    state.quran = quran;
-    state.adhkar = adhkar;
-    state.islamicSettings = islamicSettings;
-    state.customThemes = savedThemes;
-    (state as any).wellnessApps = blockedApps;
-    (state as any).wellnessSettings = dwSettings;
-    (state as any).wellnessStats = dwStats;
-    return state;
+    return {
+      ...BackupService.createBackupData(habits, tasks, settings, timestamp),
+      habitCategories, journal, goals, visionBoard, reports, timeBlocks,
+      finance: { accounts, transactions, budgets, savingsGoals, currency },
+      meals: { recipes, foods, mealPlans, shoppingList },
+      sleepLogs, sleepSettings, prayers, quran, adhkar, islamicSettings,
+      customThemes: savedThemes,
+      wellnessApps: blockedApps,
+      wellnessSettings: dwSettings,
+      wellnessStats: dwStats
+    } as any;
   }, [
     habits, habitCategories, tasks, settings, journal, goals, visionBoard, reports,
     accounts, transactions, budgets, savingsGoals, currency,
@@ -93,152 +81,106 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isLocalEmpty = useMemo(() => {
     if (!isLocalReady) return false;
-    return BackupService.isDataEmpty(getCurrentSnapshot());
+    const snap = getCurrentSnapshot();
+    return BackupService.isDataEmpty(snap);
   }, [isLocalReady, getCurrentSnapshot]);
 
-  useEffect(() => {
-    const unsubscribe = FirebaseService.init((currentUser) => {
-      setUser(currentUser);
-      setGoogleConnected(!!currentUser);
-      if (currentUser) {
-        setSyncStatus('connecting');
-      } else {
-        setSyncStatus('idle');
-        lastUploadedTsRef.current = 0;
-      }
-    });
-    return () => unsubscribe();
-  }, [setGoogleConnected]);
-
-  // Robust Handshake Logic for Multi-Device Alignment
-  useEffect(() => {
-    if (!user || !isLocalReady || syncStatus === 'ready') return;
-
-    console.log("Sync Handshake: Establishing secure cloud connection...");
-    setSyncStatus('handshake');
-
-    const unsubscribe = FirebaseService.subscribeToUserData(async (cloudData) => {
-      if (isIncomingSync.current) return;
-
-      const lastKnownCloudTs = Number(localStorage.getItem(LAST_CLOUD_TS_KEY)) || 0;
-
-      // CASE 1: Cloud is empty (brand new account)
-      if (!cloudData || !cloudData.exportDate) {
-        console.log("Handshake: Cloud repository empty. Initializing master copy...");
-        if (!isLocalEmpty) {
-          const snapshot = getCurrentSnapshot();
-          await FirebaseService.saveUserData(snapshot);
-          const localTs = new Date(snapshot.exportDate).getTime();
-          localStorage.setItem(LAST_CLOUD_TS_KEY, localTs.toString());
-          lastUploadedTsRef.current = localTs;
-        }
-        setSyncStatus('ready');
-        return;
-      }
-
-      const cloudTs = new Date(cloudData.exportDate).getTime();
-
-      // CASE 2: Cloud Data Conflict Resolution
-      // We pull if:
-      // 1. Local is truly empty (e.g. new device sign-in)
-      // 2. Cloud timestamp is newer than our last record of cloud sync
-      const shouldRestore = isLocalEmpty || cloudTs > lastKnownCloudTs;
-
-      if (shouldRestore) {
-        console.log(`Handshake: Cloud state is newer (${new Date(cloudTs).toLocaleString()}). Restoring architecture...`);
-        isIncomingSync.current = true;
-        setIsSyncing(true);
-        
-        try {
-          const success = await BackupService.performReplace(cloudData);
-          if (success) {
-            localStorage.setItem(LAST_CLOUD_TS_KEY, cloudTs.toString());
-            lastUploadedTsRef.current = cloudTs;
-            setLastSyncedAt(new Date());
-            showToast('Cloud Architecture Restored', 'success');
-          }
-        } catch (e) {
-          console.error("Restoration Failed:", e);
-          setSyncStatus('error');
-        } finally {
-          setIsSyncing(false);
-          setSyncStatus('ready');
-          setTimeout(() => { isIncomingSync.current = false; }, 3000);
-        }
-      } else {
-        console.log("Handshake: System aligned. Local is current.");
-        lastUploadedTsRef.current = lastKnownCloudTs;
-        setSyncStatus('ready');
-      }
-    });
-
-    return () => unsubscribe();
-  }, [user, isLocalReady, isLocalEmpty, syncStatus, getCurrentSnapshot, showToast]);
-
-  // Automatic Background Mirroring (Push logic)
-  useEffect(() => {
-    // Only mirror if handshake is complete and data isn't empty
-    if (!user || !isLocalReady || isSyncing || isIncomingSync.current || syncStatus !== 'ready') return;
+  // Handle Handshake (Initial Load Logic)
+  const performHandshake = useCallback(async () => {
+    if (!user || !isLocalReady) return;
     
-    if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
-
-    syncDebounceRef.current = setTimeout(async () => {
-      const now = new Date().toISOString();
-      const snapshot = getCurrentSnapshot(now);
-      const currentLocalTs = new Date(now).getTime();
+    setSyncStatus('handshake');
+    console.group("LifeOS Sync: Handshake Started");
+    
+    try {
+      const cloudData = await FirebaseService.fetchCloudData();
       
-      // Safety: Never push if local is empty but we have a record of cloud data
-      const lastKnownCloudTs = Number(localStorage.getItem(LAST_CLOUD_TS_KEY)) || 0;
-      if (isLocalEmpty && lastKnownCloudTs > 0) {
-        console.warn("Sync: Blocked push of empty local state over existing cloud data.");
-        return;
+      if (!cloudData) {
+        console.log("Handshake: Cloud is empty.");
+        if (!isLocalEmpty) {
+          console.log("Handshake: Local has data. Seeding cloud...");
+          await FirebaseService.saveUserData(getCurrentSnapshot());
+          setLastSyncedAt(new Date());
+        }
+      } else {
+        console.log("Handshake: Cloud found. Comparing versions...");
+        const cloudDate = new Date(cloudData.exportDate).getTime();
+        const localDate = Number(localStorage.getItem('lifeos_last_sync_local_ts')) || 0;
+
+        if (isLocalEmpty || cloudDate > localDate) {
+          console.log("Handshake: Cloud is newer or local is empty. Pulling...");
+          isIncomingSync.current = true;
+          await BackupService.performReplace(cloudData);
+          localStorage.setItem('lifeos_last_sync_local_ts', cloudDate.toString());
+          setLastSyncedAt(new Date());
+          showToast('Cloud Data Restored', 'success');
+          setTimeout(() => { isIncomingSync.current = false; }, 2000);
+        } else {
+          console.log("Handshake: Local is current or ahead. Keeping local.");
+        }
       }
+      setSyncStatus('stable');
+    } catch (e) {
+      console.error("Handshake Failed:", e);
+      setSyncStatus('error');
+    } finally {
+      console.groupEnd();
+    }
+  }, [user, isLocalReady, isLocalEmpty, getCurrentSnapshot, showToast]);
 
-      // Check if data actually changed since last upload
-      if (currentLocalTs <= lastUploadedTsRef.current) return;
+  // Sync Subscriptions
+  useEffect(() => {
+    const unsub = FirebaseService.init((u) => {
+      setUser(u);
+      setGoogleConnected(!!u);
+      if (u) performHandshake();
+      else setSyncStatus('idle');
+    });
+    return () => unsub();
+  }, [performHandshake, setGoogleConnected]);
 
+  // Auto-Mirroring (Push on change)
+  useEffect(() => {
+    if (!user || !isLocalReady || syncStatus !== 'stable' || isIncomingSync.current) return;
+
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    
+    syncTimeoutRef.current = setTimeout(async () => {
+      setSyncStatus('syncing');
       try {
-        setIsSyncing(true);
-        await FirebaseService.saveUserData(snapshot);
-        localStorage.setItem(LAST_CLOUD_TS_KEY, currentLocalTs.toString());
-        lastUploadedTsRef.current = currentLocalTs;
+        const snap = getCurrentSnapshot();
+        await FirebaseService.saveUserData(snap);
+        localStorage.setItem('lifeos_last_sync_local_ts', new Date(snap.exportDate).getTime().toString());
         setLastSyncedAt(new Date());
+        setSyncStatus('stable');
       } catch (e) {
-        console.error("Background Mirroring Failed:", e);
-      } finally {
-        setIsSyncing(false);
+        setSyncStatus('error');
       }
-    }, 15000); // 15s debounce for stable mirroring
+    }, 10000); // 10s debounce to batch rapid changes
 
-    return () => {
-      if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
-    };
-  }, [user, isLocalReady, isSyncing, syncStatus, getCurrentSnapshot, isLocalEmpty]);
+    return () => { if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current); };
+  }, [getCurrentSnapshot, isLocalReady, syncStatus, user]);
 
   const syncNow = async () => {
-    if (!user) {
-        showToast("Authorization required", "error");
-        return;
-    }
-    setIsSyncing(true);
+    if (!user) return;
+    setSyncStatus('syncing');
     try {
-        const now = new Date().toISOString();
-        const data = getCurrentSnapshot(now);
-        await FirebaseService.saveUserData(data);
-        const ts = new Date(now).getTime();
-        localStorage.setItem(LAST_CLOUD_TS_KEY, ts.toString());
-        lastUploadedTsRef.current = ts;
-        setLastSyncedAt(new Date());
-        showToast('System Mirrored', 'success');
-    } catch(e) {
-        showToast('Sync Failure', 'error');
-    } finally {
-        setIsSyncing(false);
+      await performHandshake();
+      showToast('Manual Sync Complete', 'success');
+    } catch (e) {
+      setSyncStatus('error');
+      showToast('Sync Failed', 'error');
     }
   };
 
   return (
-    <SyncContext.Provider value={{ isSyncing, lastSyncedAt, user, syncStatus, syncNow }}>
+    <SyncContext.Provider value={{ 
+      isSyncing: syncStatus === 'syncing', 
+      lastSyncedAt, 
+      user, 
+      syncStatus, 
+      syncNow 
+    }}>
       {children}
     </SyncContext.Provider>
   );
@@ -246,6 +188,6 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 export const useSync = () => {
   const context = useContext(SyncContext);
-  if (context === undefined) throw new Error('useSync must be used within a SyncProvider');
+  if (!context) throw new Error('useSync must be used within SyncProvider');
   return context;
 };

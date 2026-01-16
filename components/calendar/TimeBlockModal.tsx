@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Clock, Tag, Type, Trash2, CheckCircle2, Circle, MoreHorizontal, Calendar, ArrowRight } from 'lucide-react';
+import { X, Clock, Tag, Type, Trash2, CheckCircle2, Circle, MoreHorizontal, Calendar, ArrowRight, Palette, Check } from 'lucide-react';
 import { TimeBlock, TIME_BLOCK_CATEGORIES } from '../../types';
 
 interface TimeBlockModalProps {
@@ -10,6 +10,19 @@ interface TimeBlockModalProps {
   onClose: () => void;
   onDelete?: (id: string) => void;
 }
+
+const PRESET_COLORS = [
+  { name: 'Indigo', value: '#818cf8' },
+  { name: 'Blue', value: '#60a5fa' },
+  { name: 'Emerald', value: '#34d399' },
+  { name: 'Amber', value: '#fbbf24' },
+  { name: 'Rose', value: '#fb7185' },
+  { name: 'Slate', value: '#94a3b8' },
+  { name: 'Violet', value: '#a78bfa' },
+  { name: 'Orange', value: '#f97316' },
+  { name: 'Pink', value: '#f472b6' },
+  { name: 'Cyan', value: '#22d3ee' },
+];
 
 export const TimeBlockModal: React.FC<TimeBlockModalProps> = ({ initialData, date, onSave, onClose, onDelete }) => {
   const [title, setTitle] = useState(initialData?.title || '');
@@ -52,9 +65,21 @@ export const TimeBlockModal: React.FC<TimeBlockModalProps> = ({ initialData, dat
     onClose();
   };
 
+  const handleDelete = () => {
+    if (initialData?.id && onDelete) {
+      if (confirm('Delete this block?')) {
+        onDelete(initialData.id);
+        onClose();
+      }
+    }
+  };
+
   const handleCategorySelect = (cat: typeof TIME_BLOCK_CATEGORIES[0]) => {
     setCategory(cat.name);
-    setColor(cat.color);
+    // Only update color if the user hasn't manually picked one or if it's a new block
+    if (!initialData?.id || color === initialData.color) {
+      setColor(cat.color);
+    }
   };
 
   return (
@@ -63,15 +88,15 @@ export const TimeBlockModal: React.FC<TimeBlockModalProps> = ({ initialData, dat
         
         {/* Header Actions */}
         <div className="px-6 pt-6 flex justify-between items-center shrink-0">
-           <button onClick={onClose} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+           <button type="button" onClick={onClose} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
              <X size={20} />
            </button>
            
-           {initialData && (
+           {initialData?.id && (
              <div className="flex gap-2">
                 <button 
                   type="button"
-                  onClick={() => { if(confirm('Delete this block?')) { onDelete?.(initialData.id); onClose(); } }}
+                  onClick={handleDelete}
                   className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
                 >
                    <Trash2 size={20} />
@@ -94,10 +119,8 @@ export const TimeBlockModal: React.FC<TimeBlockModalProps> = ({ initialData, dat
               />
            </div>
 
-           {/* Time Controls (Refined) */}
+           {/* Time Controls */}
            <div className="bg-gray-50 dark:bg-gray-800/50 p-5 rounded-3xl border border-gray-100 dark:border-gray-700 space-y-4">
-              
-              {/* Start Time Row */}
               <div className="flex items-center justify-between">
                  <div className="flex flex-col">
                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Start Time</label>
@@ -121,7 +144,6 @@ export const TimeBlockModal: React.FC<TimeBlockModalProps> = ({ initialData, dat
                  </div>
               </div>
 
-              {/* Duration Slider & Presets */}
               <div>
                  <div className="flex justify-between items-center mb-2">
                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Duration</label>
@@ -139,19 +161,6 @@ export const TimeBlockModal: React.FC<TimeBlockModalProps> = ({ initialData, dat
                    onChange={(e) => setDuration(parseInt(e.target.value))}
                    className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-primary-600 mb-3"
                  />
-
-                 <div className="flex gap-2 justify-between">
-                    {[15, 30, 45, 60, 90, 120].map(mins => (
-                       <button
-                         key={mins}
-                         type="button"
-                         onClick={() => setDuration(mins)}
-                         className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${duration === mins ? 'bg-white dark:bg-gray-600 text-primary-600 dark:text-primary-300 shadow-sm ring-1 ring-gray-200 dark:ring-gray-500' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
-                       >
-                          {mins}m
-                       </button>
-                    ))}
-                 </div>
               </div>
            </div>
 
@@ -175,9 +184,28 @@ export const TimeBlockModal: React.FC<TimeBlockModalProps> = ({ initialData, dat
                     </button>
                  ))}
               </div>
-              <div className="mt-3 flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400 ml-1">
-                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                 {category}
+           </div>
+
+           {/* Color Picker Section */}
+           <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Palette size={14} /> Block Color
+              </label>
+              <div className="flex flex-wrap gap-2.5">
+                 {PRESET_COLORS.map(c => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => setColor(c.value)}
+                      className={`
+                        w-7 h-7 rounded-full transition-all border-2
+                        ${color === c.value ? 'border-gray-900 dark:border-white scale-110 shadow-md' : 'border-transparent opacity-70 hover:opacity-100'}
+                      `}
+                      style={{ backgroundColor: c.value }}
+                    >
+                      {color === c.value && <Check size={12} className="mx-auto text-white drop-shadow-sm" strokeWidth={4} />}
+                    </button>
+                 ))}
               </div>
            </div>
 
@@ -187,12 +215,12 @@ export const TimeBlockModal: React.FC<TimeBlockModalProps> = ({ initialData, dat
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 placeholder="Add notes..."
-                className="w-full bg-transparent border-none text-gray-900 dark:text-white placeholder-gray-400 focus:ring-0 resize-none text-sm h-16 p-0"
+                className="w-full bg-transparent border-none text-gray-900 dark:text-white placeholder-gray-300 focus:ring-0 resize-none text-sm h-16 p-0"
               />
            </div>
 
            {/* Completion Checkbox (Only if editing) */}
-           {initialData && (
+           {initialData?.id && (
               <div 
                 onClick={() => setCompleted(!completed)}
                 className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer transition-all bg-gray-50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -211,7 +239,7 @@ export const TimeBlockModal: React.FC<TimeBlockModalProps> = ({ initialData, dat
              type="submit"
              className="w-full py-4 rounded-2xl bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold text-lg shadow-xl shadow-gray-900/10 dark:shadow-white/5 active:scale-95 transition-all"
            >
-              {initialData ? 'Update Block' : 'Create Block'}
+              {initialData?.id ? 'Update Block' : 'Create Block'}
            </button>
 
         </form>
